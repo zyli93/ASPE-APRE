@@ -1,0 +1,17 @@
+networkx
+ujson
+pandas
+argparse
+tqdm 
+boto3 
+requests 
+regex 
+sentencepiece 
+sacremoses
+nltk
+lxml
+bs4
+spacy
+torchtext
+spacy
+mosestokenizer
