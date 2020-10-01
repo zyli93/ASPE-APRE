@@ -3,12 +3,12 @@ Rating prediction with Unsupervised Aspect-level Review Analysis (RUARA)
 
 ## The TODO list
 
-- [ ] implement user review aggregation and item review aggregation for Amazon
-- [ ] implement user review aggregation and item review aggregation for Yelp
+- [ ] implement user review aggregation and item review aggregation for Amazon & Yelp (in annotate.py)
 - [ ] add dependency info for nlp toolkits such as nltk and spaCy
 - [ ] check if the strings need better processing?
-- [ ] filter out too long or too short reviews
+- [x] filter out too long or too short reviews
 - [ ] pmi compute error in TagGCN because `combinations()` doesn't consider order
+- [x] preprocessing code cannot deal with text = `NaN`
 
 ## Data
 
@@ -53,6 +53,7 @@ Detailed instruction for each flag
 ```text
 usage: preprocess.py [-h] --dataset DATASET
                      [--test_split_ratio TEST_SPLIT_RATIO] [--k_core K_CORE]
+                     [--min_review_len MIN_REVIEW_LEN]
                      [--amazon_subset AMAZON_SUBSET]
                      [--yelp_min_cat_num YELP_MIN_CAT_NUM]
                      [--yelp_city YELP_CITY]
@@ -63,6 +64,8 @@ optional arguments:
   --test_split_ratio TEST_SPLIT_RATIO
                         Ratio of test split to main dataset. Default=0.05.
   --k_core K_CORE       The number of cores of the dataset. Default=5.
+  --min_review_len MIN_REVIEW_LEN
+                        Minimum length of the reviews. Default=20.
   --amazon_subset AMAZON_SUBSET
                         [Amazon-only] Subset name of Amazon dataset
   --yelp_min_cat_num YELP_MIN_CAT_NUM
@@ -72,7 +75,31 @@ optional arguments:
                         [Yelp-only] Subset city of Yelp dataset
 ```
 
-###
+Here's an example for parsing the _Digital Music_ dataset for Amazon.
+```
+python src/preprocess.py --dataset=amazon --amazon_subset=digital_music
+```
+
+### Unsupervised aspect annotation
+
+The `annotate.py` is in charge of annotating the aspects and corresponding opinion. Detailed instructions are below.
+
+```text
+usage: annotate.py [-h] --path PATH [--pmi_window_size PMI_WINDOW_SIZE]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --path PATH           Path to the dataset goodreads
+  --pmi_window_size PMI_WINDOW_SIZE
+                        The window size of PMI cooccurance relations.
+                        Default=3.
+```
+
+Here's an example for parsing the _Digital Music_ dataset for Amazon.
+```
+python src/annotate.py --path=./data/amazon/digital_music
+```
+
 
 ### Run with Docker
 

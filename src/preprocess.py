@@ -69,8 +69,10 @@ def parse_yelp(args):
     food_cats = load_yelp_categories()
 
     business_profiles = dict()
+
+    # process "business.json"
     with open(in_dir + "business.json", "r") as fin:
-        for ind, ln in enumerate(fin):
+        for _, ln in enumerate(fin):
             data = json.loads(ln)
             # entry must have below fields
             if not all([bool(data[x]) for x in
@@ -106,6 +108,8 @@ def parse_yelp(args):
 
     review_bids, review_uids = [], []
     review_set = dict()
+
+    # process "review.json"
     with open(in_dir + "review.json", "r") as fin:
         for ln in fin:
             data = json.loads(ln)
@@ -117,7 +121,12 @@ def parse_yelp(args):
 
             bid, uid = data['business_id'], data['user_id']
 
+            # filter out other cities
             if bid not in business_profiles:
+                continue
+            
+            # filter out extremely short reviews
+            if len(data['text']) < args.min_review_len:
                 continue
 
             if bid not in bid2idx:
@@ -170,6 +179,9 @@ def parse_yelp(args):
 
     # create a dataframe to save/view/...
     kcore_df = pd.DataFrame(kcore_dataset)
+    # remove rows with NaN
+    kcore_df = kcore_df.dropna(axis=0)
+
     print("[Yelp] \t number of unique users [{}] and businesses [{}]".format(
         kcore_df["user_id"].nunique(), kcore_df['item_id'].nunique()))
     print("[Yelp] \t unique ratings {}".format(kcore_df['rating'].unique()))
@@ -226,6 +238,10 @@ def parse_amazon(args):
 
             iid, uid = data["asin"], data["reviewerID"]
 
+            # filter out extremely short reviews
+            if len(data['reviewText']) < args.min_review_len:
+                continue
+
             # change string `asin` and `reviewerID` to `iid` and `uid`
             if iid not in iid2idx:
                 new_iid = "i_"+str(len(uniq_iids))
@@ -250,7 +266,10 @@ def parse_amazon(args):
 
             dataset_entries.append(entry)
 
+    # TODO: whether to re-apply kcore for amazon should be decided later!
+
     df = pd.DataFrame(dataset_entries)
+    df = df.dropna(axis=0)  # dropping rows with NaN in it.
     print("[Amazon] \t num of nodes [{}] and num of edges [{}]".format(
         len(uniq_uids)+len(uniq_iids), df.shape[0]))
     print("[Amazon] \t unique number of users [{}], items [{}]".format(
@@ -416,6 +435,12 @@ if __name__ == '__main__':
         type=int,
         default=5,
         help="The number of cores of the dataset. Default=5.")
+    
+    parser.add_argument(
+        "--min_review_len",
+        type=int,
+        default=20,
+        help="Minimum length of the reviews. Default=20.")
 
     parser.add_argument(
         "--amazon_subset",

@@ -134,3 +134,6 @@ dmypy.json
 # raw dataset and generated dataset
 raw_datasets/
 data/
+
+# core
+core
