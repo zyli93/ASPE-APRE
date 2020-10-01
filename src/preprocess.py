@@ -39,16 +39,31 @@ def process_string(string):
     pass
 
 
+def output_aggregate_reviews(df, relative_path, for_user=True, output_single_file=False):
+    """output aggregate review for user or for item
+    [Moved to annotation process]
+    Args:
+        df - the input dataframe
+        path - the path to the output file
+        for_user - [Bool] create for user or for item 
+        output_single_file - [Bool] whether to generate everything in a single file 
+    """
+    pass
+
+
 def parse_yelp(args):
     """draw review from `review.json` """
 
-    assert hasattr(args, "min_cat_num"), "Please set `min_cat_num` for yelp."
+    assert hasattr(
+        args, "yelp_min_cat_num"), "Please set `yelp_min_cat_num` for yelp."
     assert hasattr(args, "k_core"), "Please set `k_core` for yelp."
 
     in_dir = INPUT_DIR + "yelp/"
-    out_dir = OUTPUT_DIR + "yelp/"
+    out_dir = OUTPUT_DIR + "yelp/{}/".format(args.yelp_city)
 
-    print("[Yelp] processing yelp dataset ...")
+    print("[Yelp] processing yelp dataset [{}, min category number={}, {}-cores]...".format(
+        args.yelp_city, args.yelp_min_cat_num, args.k_core
+    ))
 
     print("[Yelp] loading business ...")
     food_cats = load_yelp_categories()
@@ -64,16 +79,20 @@ def parse_yelp(args):
             if data['review_count'] < args.k_core:
                 continue
 
+            # select business by city name
+            if data['city'].lower() != args.yelp_city.lower():
+                continue
+
             categories = [x.strip().lower() for x in
                           data['categories'].strip().split(", ")]
             filter_cats_num = sum([x in food_cats for x in categories])
 
             # throw away the business in two cases:
             #    1. all its cat(s) not present in food_cats
-            #    2. >=1 cats not in, but >args.min_cat_num in food_cats
+            #    2. >=1 cats not in, but >args.yelp_min_cat_num in food_cats
             if (not filter_cats_num) or \
                 (len(categories) != filter_cats_num
-                 and filter_cats_num < args.min_cat_num):
+                 and filter_cats_num < args.yelp_min_cat_num):
                 continue
 
             bid = data['business_id']
@@ -160,25 +179,26 @@ def parse_yelp(args):
     kcore_df.to_csv(out_dir+"data.csv", index=False,
                     columns=['user_id', 'item_id', 'rating', 'review'])
 
-    dump_pkl(out_dir+"bid2idx.pkl", bid2idx)
-    dump_pkl(out_dir+"uniq_bids.pkl", uniq_bids)
-    dump_pkl(out_dir+"uid2idx.pkl", uid2idx)
-    dump_pkl(out_dir+"uniq_uids.pkl", uniq_uids)
+    dump_pkl(out_dir+"business_id_2_index.pkl", bid2idx)
+    dump_pkl(out_dir+"unique_buesiness_ids.pkl", uniq_bids)
+    dump_pkl(out_dir+"user_id_2_index.pkl", uid2idx)
+    dump_pkl(out_dir+"unique_user_ids.pkl", uniq_uids)
+
+    train, test = train_test_split(kcore_df, test_size=args.test_split_ratio)
+    train.to_csv(out_dir + 'train_data.csv', index=False,
+                 columns=["user_id", "item_id", "rating", "text"])
+    test.to_csv(out_dir + 'test_data.csv',index=False,
+                columns=["user_id", "item_id", "rating", "text"])
 
     print("[Yelp] preprocessing done, files saved to {}".format(out_dir))
-
-    train, test = train_test_split(kcore_df, test_size=test_split_ratio)
-    train.to_csv('sTrainData.csv')
-    test.to_csv('sTestData.csv')
 
 
 def parse_amazon(args):
     """Parse Amazon subsets
-
-        Note: Amazon datasets are downloaded 5-cored.
+       Note: Amazon datasets are downloaded 5-cored.
     """
-    assert hasattr(
-        args, "amazon_subset"), "Please set `amazon_subset` for Amazon dataset."
+    if not hasattr(args, "amazon_subset"):
+        raise AttributeError("Please set `amazon_subset` for Amazon dataset.")
     print("[Amazon] parsing data from Amazon {}".format(args.amazon_subset))
 
     in_dir = INPUT_DIR + "amazon/"
@@ -188,8 +208,10 @@ def parse_amazon(args):
     uniq_iids, uniq_uids = [], []
 
     in_file = in_dir + args.amazon_subset + ".json"
-    assert os.path.exists(in_file),\
-        "Cannot find the dataset {}".format(args.amazon_subset)
+
+    if not os.path.exists(in_file):
+        raise FileNotFoundError(
+            "Cannot find the dataset {}".format(args.amazon_subset))
 
     dataset_entries = []
     with open(in_file, "r") as fin:
@@ -234,19 +256,25 @@ def parse_amazon(args):
     print("[Amazon] \t unique number of users [{}], items [{}]".format(
         df["user_id"].nunique(), df["item_id"].nunique()))
 
-    print("[Amazon] saving data to disk ...")
+    print("[Amazon] saving source data to disk ...")
     make_dir(out_dir)
     df.to_csv(out_dir+"data.csv", index=False,
               columns=["user_id", "item_id", "rating", "text"])
-    dump_pkl(out_dir+"iid2idx.pkl", iid2idx)
-    dump_pkl(out_dir+"uid2idx.pkl", uid2idx)
-    dump_pkl(out_dir+"uniq_iids.pkl", uniq_iids)
-    dump_pkl(out_dir+"uniq_uids.pkl", uniq_uids)
-    print("[Amazon] done saving data to {}!".format(out_dir))
+    dump_pkl(out_dir+"item_id_2_index.pkl", iid2idx)
+    dump_pkl(out_dir+"user_id_2_index.pkl", uid2idx)
+    dump_pkl(out_dir+"unique_item_ids.pkl", uniq_iids)
+    dump_pkl(out_dir+"unique_user_ids.pkl", uniq_uids)
 
+    print("[Amazon] splitting train and test data ...")
     train, test = train_test_split(df, test_size=args.test_split_ratio)
-    train.to_csv(out_dir+'train_data.csv')
-    test.to_csv(out_dir+'test_data.csv')
+    train.to_csv(out_dir+'train_data.csv', index=False,
+                 columns=["user_id", "item_id", "rating", "text"])
+    test.to_csv(out_dir+'test_data.csv', index=False,
+                columns=["user_id", "item_id", "rating", "text"])
+
+    print("[Amazon] aggregating users' and items' reviews ...")
+
+    print("[Amazon] done saving data to {}!".format(out_dir))
 
 
 def parse_goodreads(args):
@@ -374,31 +402,36 @@ if __name__ == '__main__':
     parser.add_argument(
         "--dataset",
         type=str,
-        default="yelp",
+        required=True,
         help="Dataset: yelp, amazon, goodreads")
-
-    parser.add_argument(
-        "--k_core",
-        type=int,
-        default=5,
-        help="The number of cores of the dataset.")
-
-    parser.add_argument(
-        "--min_cat_num",
-        type=int,
-        default=2,
-        help="Minimum number of category labels in the filter set.")
-
-    parser.add_argument(
-        "--amazon_subset",
-        type=str,
-        help="Subset name of Amazon dataset")
 
     parser.add_argument(
         "--test_split_ratio",
         type=float,
         default=0.05,
-        help="Ratio of test split to main dataset")
+        help="Ratio of test split to main dataset. Default=0.05.")
+
+    parser.add_argument(
+        "--k_core",
+        type=int,
+        default=5,
+        help="The number of cores of the dataset. Default=5.")
+
+    parser.add_argument(
+        "--amazon_subset",
+        type=str,
+        help="[Amazon-only] Subset name of Amazon dataset")
+
+    parser.add_argument(
+        "--yelp_min_cat_num",
+        type=int,
+        default=2,
+        help="[Yelp-only] Minimum number of category labels in the filter set. Default=2.")
+
+    parser.add_argument(
+        "--yelp_city",
+        type=str,
+        help="[Yelp-only] Subset city of Yelp dataset")
 
     args = parser.parse_args()
 
