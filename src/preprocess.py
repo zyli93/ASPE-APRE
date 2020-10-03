@@ -9,19 +9,19 @@ import argparse
 import pandas as pd
 import networkx as nx
 import numpy as np
+import ujson as json
+from tqdm import tqdm
 from sklearn.model_selection import train_test_split
+from autocorrect import Speller
+from nltk.tokenize import sent_tokenize, word_tokenize
 
-try:
-    import ujson as json
-except ImportError:
-    import json
-
-from utils import make_dir, dump_pkl
+from utils import make_dir, dump_pkl, clean_str2
 
 CONFIG_DIR = "./configs/"
 INPUT_DIR = "./raw_datasets/"
 OUTPUT_DIR = "./data/"
 
+correcter = Speller(lang="en")
 
 def load_yelp_categories():
     """Load Yelp categories for business filter"""
@@ -34,9 +34,23 @@ def load_yelp_categories():
     return set(cats)
 
 
-def process_string(string):
-    """pipeline to process string"""
-    pass
+def process_text(text, do_spell_check):
+    """pipeline to process string
+    
+    Args:
+        text - text snippet consisting of multiple sentences
+        do_spell_check - [Bool] Whether to use spell check
+    Returns:
+        cleaned string with typos fixed by SpellChecker
+    """
+    sentences = sent_tokenize(text)
+    ret_sentences = []
+    for sent in sentences:
+        if do_spell_check:
+            sent = correcter(sent)
+        sent = clean_str2(sent)
+        ret_sentences.append(sent)
+    return "\n".join(ret_sentences)
 
 
 def output_aggregate_reviews(df, relative_path, for_user=True, output_single_file=False):
@@ -148,12 +162,15 @@ def parse_yelp(args):
             review_bids.append(new_bid)
             review_uids.append(new_uid)
 
+            # TODO: add preprocess text here!
+            processed_text = process_text(data['text'])
+
             # NOTE: new_uid and new_bid are `u_[user_idx]` and `b_[bus_idx]`.
             review_set[(new_uid, new_bid)] = {
                 "user_id": new_uid,
                 "item_id": new_bid,
                 "rating": data['stars'],
-                "review": data["text"]}
+                "review": processed_text} 
 
     assert len(review_bids) == len(review_uids)
 
@@ -227,7 +244,7 @@ def parse_amazon(args):
 
     dataset_entries = []
     with open(in_file, "r") as fin:
-        for jsonl in fin:
+        for jsonl in tqdm(fin):
             data = json.loads(jsonl)
 
             # make sure it has all domains of interest
@@ -239,7 +256,10 @@ def parse_amazon(args):
             iid, uid = data["asin"], data["reviewerID"]
 
             # filter out extremely short reviews
-            if len(data['reviewText']) < args.min_review_len:
+            processed_text = process_text(
+                data['reviewText'], do_spell_check=args.use_spell_check)
+            # processed_text = data['reviewText']
+            if len(processed_text) < args.min_review_len:
                 continue
 
             # change string `asin` and `reviewerID` to `iid` and `uid`
@@ -259,10 +279,13 @@ def parse_amazon(args):
             else:
                 new_uid = uid2idx[uid]
 
+
             entry = {
                 "item_id": new_iid, "user_id": new_uid,
                 "rating": float(data['overall']),
-                "text": data['reviewText'].replace("\n", " ")}
+                "text": processed_text,
+                "original_text": data['reviewText']}
+            # TODO: to remove the original_text column later
 
             dataset_entries.append(entry)
 
@@ -287,9 +310,9 @@ def parse_amazon(args):
     print("[Amazon] splitting train and test data ...")
     train, test = train_test_split(df, test_size=args.test_split_ratio)
     train.to_csv(out_dir+'train_data.csv', index=False,
-                 columns=["user_id", "item_id", "rating", "text"])
+                 columns=["user_id", "item_id", "rating", "text", "original_text"])
     test.to_csv(out_dir+'test_data.csv', index=False,
-                columns=["user_id", "item_id", "rating", "text"])
+                columns=["user_id", "item_id", "rating", "text", "original_text"])
 
     print("[Amazon] aggregating users' and items' reviews ...")
 
@@ -297,6 +320,7 @@ def parse_amazon(args):
 
 
 def parse_goodreads(args):
+    # TODO: so far the modifications haven't been applied on goodreads
     print("[Goodreads] processing yelp dataset ...")
 
     json_data = []
@@ -441,6 +465,11 @@ if __name__ == '__main__':
         type=int,
         default=20,
         help="Minimum length of the reviews. Default=20.")
+
+    parser.add_argument(
+        "--use_spell_check",
+        action="store_true",
+        help="Whether to use spell check and correction. Turning this on will SLOW DOWN the process.")
 
     parser.add_argument(
         "--amazon_subset",

@@ -15,6 +15,9 @@ from itertools import permutations
 from utils import clean_str2
 from nltk.tokenize import sent_tokenize, word_tokenize
 from tqdm import tqdm
+from math import log
+
+from utils import dump_pkl
 
 
 def load_train_file(args):
@@ -56,7 +59,9 @@ def compute_pmi(args, df):
 
     if not hasattr(args, "pmi_window_size"):
         raise AttributeError("--pmi_window_size has to be specified!")
-    print("[Annotate] compute PMI ...", end=" ")
+    print("[Annotate] compute P(i) and P(i,j) ...", end=" ")
+
+    # TODO: to discard the rare tokens as they are incorrect!
 
     # initialize counters
     ws = args.pmi_window_size
@@ -64,8 +69,13 @@ def compute_pmi(args, df):
     total_window_counter = 1
 
     text_col = df["text"]
-    for line in tqdm(text_col):
-        line = line.lower()
+    for i, line in enumerate(tqdm(text_col)):
+        try:
+            line = line.lower()
+        except:
+            print(i)
+            print(line)
+            sys.exit()
         for sent in sent_tokenize(line):
             word_tokens = word_tokenize(sent)
             for i in range(0, len(word_tokens) - ws):
@@ -74,9 +84,22 @@ def compute_pmi(args, df):
                 pair_counter.update(permutations(token_window, 2))
                 total_window_counter += 1
     print("Done!")
-    return total_window_counter, single_counter, pair_counter
 
+    # build p_i and p_ij and divide them by total_window_counter    
+    print("[Annotate] compute PMI ...", end=" ")
+    p_i = single_counter.copy()
+    p_ij = pair_counter.copy()
+    p_i = {key: value / total_window_counter for key, value in p_i.items()}
+    p_ij = {key: value / total_window_counter for key, value in p_ij.items()}
+
+    # compute PMI, PMI[i,j] = log(P(i,j) / (P(i)*P(j))
+    pmi = {key: log(value/(p_i[key[0]] * p_i[key[1]]))
+           for key, value in p_ij.items()}
+    print("Done!")
+
+    dump_pkl("pmi.pkl", pmi)  # TODO: to delete later after verification
     # TODO: how to verify this is correct?
+    return pmi
 
 
 def main(args):

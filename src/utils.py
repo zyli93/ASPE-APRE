@@ -190,16 +190,28 @@ def clean_str2(s):
         string - the string to clean
     Return:
         _ - the cleaned string
+    
+    Things that are done here:
+        1. get rid of
+            a. contents in brackets
+            b. punctuations
+            c. words containing numbers in them
+            d. double quotes
+        2. replace
+            a. 's to s (user's -> users)
+            b. 've to ve (I've -> Ive)
+            c. 't, 're, 'd, 'll
+            d. more than one (2+) spaces -> one space
     """
     ss = s
-    translator = str.maketrans("", "", string.punctuation)
+    # translator = str.maketrans("", "", string.punctuation)
     # if there are square brackets with characters in them, get rid of the whole thing
     ss = re.sub('\[.*?\]', '', ss)
     # if anything is any of those punctuation marks, get rid of it
     ss = re.sub('[%s]' % re.escape(string.punctuation), '', ss)
     # gets rid of words containing numbers in them
     ss = re.sub('\w*\d\w*', '', ss)
-    ss = re.sub('[‘’“”…]', '', ss)  # removing double quotes
+    ss = re.sub('[\'\"]', '', ss)  # removing double quotes
     ss = re.sub('\n', '', ss)  # removing line breaks
     ss = re.sub(r"\'s", "s", ss)
     ss = re.sub(r"\'ve", "ve", ss)
@@ -208,7 +220,7 @@ def clean_str2(s):
     ss = re.sub(r"\'d", "d", ss)
     ss = re.sub(r"\'ll", "ll", ss)
     ss = re.sub(r"\s{2,}", " ", ss)
-    ss = ss.translate(translator)
+    # ss = ss.translate(translator)
     ss = re.sub(r"[^A-Za-z0-9(),!?\"\`]", " ", ss)
     ss = re.sub(r"  ", " ", ss)
     return ss.strip().lower()

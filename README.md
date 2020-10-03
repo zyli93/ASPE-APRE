@@ -9,6 +9,10 @@ Rating prediction with Unsupervised Aspect-level Review Analysis (RUARA)
 - [x] filter out too long or too short reviews
 - [ ] pmi compute error in TagGCN because `combinations()` doesn't consider order
 - [x] preprocessing code cannot deal with text = `NaN`
+- [ ] put in note that order by speed: 
+    nothing > clean_str w/o spellcheck (sc) > clean_str w/ sc
+- [ ] another package `autocorrect` works faster than SpellChecker
+- [ ] maybe the original text should also be kept for Dependency Parsing.
 
 ## Data
 
@@ -39,7 +43,13 @@ pip install -r requirements.txt
 ```
 
 #### Dependencies for NLP toolkits
-- `NLTK`
+- `nltk`:
+  - install `nltk` with `pip`.
+  - download `nltk` supporting corpus.
+    ```python
+    >>> import nltk
+    >>> nltk.download('punkt')
+    ```
 - `spaCy`
 
 ### Preprocessing
@@ -79,6 +89,8 @@ Here's an example for parsing the _Digital Music_ dataset for Amazon.
 ```
 python src/preprocess.py --dataset=amazon --amazon_subset=digital_music
 ```
+
+**Note**: We noticed that there exist words which are misspelled and can damage the PMI for aspect words. 
 
 ### Unsupervised aspect annotation
 
