@@ -92,13 +92,19 @@ def compute_pmi(args, df):
     p_i = {key: value / total_window_counter for key, value in p_i.items()}
     p_ij = {key: value / total_window_counter for key, value in p_ij.items()}
 
+    # TODO: first process p_i and p_ij, then discard some rare tokens
+    # TODO: the threshold of rare tokens are still to be decided
+
     # compute PMI, PMI[i,j] = log(P(i,j) / (P(i)*P(j))
     pmi = {key: log(value/(p_i[key[0]] * p_i[key[1]]))
            for key, value in p_ij.items()}
     print("Done!")
+    
+    # TODO: to delete dump_pkl later after verification
+    dump_pkl("pmi.pkl", pmi)  # TODO: how to verify this is correct?
 
-    dump_pkl("pmi.pkl", pmi)  # TODO: to delete later after verification
-    # TODO: how to verify this is correct?
+    dump_pkl("pij.pkl", p_ij)
+    dump_pkl("pi.pkl", p_i)
     return pmi
 
 

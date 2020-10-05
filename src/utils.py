@@ -202,27 +202,36 @@ def clean_str2(s):
             b. 've to ve (I've -> Ive)
             c. 't, 're, 'd, 'll
             d. more than one (2+) spaces -> one space
+    
+    The right order to process the signs:
+    1. 's/'ve/... to no "'"
+    2. 
     """
     ss = s
-    # translator = str.maketrans("", "", string.punctuation)
+
     # if there are square brackets with characters in them, get rid of the whole thing
-    ss = re.sub('\[.*?\]', '', ss)
-    # if anything is any of those punctuation marks, get rid of it
-    ss = re.sub('[%s]' % re.escape(string.punctuation), '', ss)
+    # ss = re.sub('\[.*?\]', '', ss)
+
+    # if there are strings concatenated by puncts get rid of them
+    ss = re.sub( r'([,.!?])([a-zA-Z0-9])', r'\1 \2', ss)
+
     # gets rid of words containing numbers in them
     ss = re.sub('\w*\d\w*', '', ss)
     ss = re.sub('[\'\"]', '', ss)  # removing double quotes
     ss = re.sub('\n', '', ss)  # removing line breaks
+    # ss = re.sub("re-", "re", ss) # specifically fix re- to re
     ss = re.sub(r"\'s", "s", ss)
     ss = re.sub(r"\'ve", "ve", ss)
     ss = re.sub(r"n\'t", "nt", ss)
     ss = re.sub(r"\'re", "re", ss)
     ss = re.sub(r"\'d", "d", ss)
     ss = re.sub(r"\'ll", "ll", ss)
-    ss = re.sub(r"\s{2,}", " ", ss)
-    # ss = ss.translate(translator)
     ss = re.sub(r"[^A-Za-z0-9(),!?\"\`]", " ", ss)
-    ss = re.sub(r"  ", " ", ss)
+
+    # if anything is any of those punctuation marks, get rid of it
+    ss = re.sub('[%s]' % re.escape(string.punctuation), '', ss)
+    ss = re.sub(r"\s{2,}", " ", ss)
+    # ss = re.sub(r"  ", " ", ss)
     return ss.strip().lower()
 
 
