@@ -1,0 +1,23 @@
+{
+    "keep":[
+        "ADJ",
+        "ADV"
+    ],
+    "discard":[
+        "ADP",
+        "PUNCT",
+        "AUX",
+        "SYM",
+        "INTJ",
+        "CONJ",
+        "X",
+        "NOUN",
+        "DET",
+        "PROPN",
+        "NUM",
+        "VERB",
+        "PART",
+        "PRON",
+        "SCONJ"
+    ]
+}

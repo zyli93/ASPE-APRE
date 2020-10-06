@@ -82,7 +82,7 @@ def compute_pmi(args, df):
                 total_window_counter += 1
     print("Done!")
 
-    # build p_i and p_ij and divide them by total_window_counter    
+    # build p_i and p_ij and divide them by total_window_counter
     print("[Annotate] compute PMI ...", end=" ")
 
     # delete rare tokens as they usually contain misspellings
@@ -90,7 +90,7 @@ def compute_pmi(args, df):
         freq = single_counter[word]
         if freq < args.token_min_count:
             del single_counter[word]
-    
+
     # delete pairs with rare tokens
     for pair in list(pair_counter.keys()):
         if pair[0] not in single_counter or pair[1] not in single_counter:
@@ -112,7 +112,7 @@ def compute_pmi(args, df):
 
     print("Done!")
     print("[Annotate] PMI matrix and vocabulary saved in {}".format(args.path))
-    
+
     # TODO: to delete dump_pkl later after verification
     dump_pkl("pmi.pkl", pmi)  # TODO: how to verify this is correct?
 
@@ -125,21 +125,24 @@ def compute_pmi(args, df):
     return pmi, pmi_vocabs
 
 
-def get_vocab_pos(args, df, vocab):
+def get_vocab_postags(args, df, vocab):
     """Get the Part-of-Speech tagging for vocabulary
     * What are `pos` and `tag`?
         - "pos": Coarse-grained part-of-speech from the Universal POS tag set.
         - "tag": Fine-grained part-of-speech.
-    
+
     Args:
         args - input arguments
         df - training dataframe
         vocab - the filtered vocabulary of PMI
-    
+
     Return:
-        vocab_pos - [Dict] word -> Dict{"pos": Counter(), "tag": Counter()}
+        vocab_pos_coarse - [Dict] word (str) -> POS (str)
+        vocab_pos_fine - [Dict] word (str) -> TAG (str)
+        (not returned) vocab_pos - 
+            [Dict] word -> Dict{"pos": Counter(), "tag": Counter()}
     """
-    print("[Annotate] processing vocabulary part-of-speech ...", end = " ")
+    print("[Annotate] processing vocabulary part-of-speech ...", end=" ")
     vocab_pos = {
         word: {"pos": Counter(), "tag": Counter()} for word in vocab}
     vocab = set(vocab)
@@ -160,9 +163,58 @@ def get_vocab_pos(args, df, vocab):
     vocab_pos_coarse = {word: vocab_pos[word]["pos"].most_common(1)[0][0]
                         for word in vocab_pos.keys()}
     vocab_pos_fine = {word: vocab_pos[word]["tag"].most_common(1)[0][0]
-                        for word in vocab_pos.keys()}
+                      for word in vocab_pos.keys()}
     print("Done!")
-    return vocab_pos, vocab_pos_coarse, vocab_pos_fine
+
+    vocab_pos_ret = vocab_pos_fine if args.use_fine_grained_pos else vocab_pos_coarse
+    return vocab_pos_ret
+
+
+def load_postag_filters(args):
+    """load pos tag filters"""
+    if args.use_fine_grained_pos:
+        pos_json = "./configs/fine_grained.pos.json"
+    else:
+        pos_json = "./configs/coarse_grained.pos.json"
+    with open(pos_json, "r") as fin:
+        pos_filters = json.load(fin)
+    return pos_filters
+
+
+def grow_aspect_words_from_seeds():
+    """
+    "Grow" (generate) aspect words from seeds for both aspects (pos/neg)
+    
+    Args:
+    """
+
+
+
+def get_top_pmi_relations(seed, quota, filter_pos, vocab_postags, pmi_matrix):
+    """Get top PMI related words
+
+    Current plan: First filter the needed POS, 
+                  then sort only with certain POS.
+
+    Args:
+        seed - the seed words
+        quota - the number of related words to return
+        filter_pos - the filters of POS tags
+        vocab_postags - the POS tags of vocabulary
+        pmi_matrix - the PMI matrix
+    Returns:
+
+    """
+    match_tokens = []
+    for (l_token, r_token), pmi_value in pmi_matrix.items():
+        # TODO: verify the vocab_postags, it is possible that r_token not in vocab_postags
+        # criteria: (1) r_token in vocab_postags
+        #           (2) r_token has particular POS tag in "filter_pos"
+        if l_token == word and r_token in vocab_postags and \
+                vocab_postags[r_token] in filter_pos:
+            match_tokens.append((r_token, vocab_postags[r_token], pmi_value))
+    match_tokens.sort(reverse=True, key=lambda x: x[2])
+    return match_tokens[:quota]
 
 
 def main(args):
@@ -175,7 +227,16 @@ def main(args):
     seeds = load_seed_words()
     train_df = load_train_file(args)
     pmi_matrix, pmi_vocab = compute_pmi(args, train_df)
-    get_vocab_pos(args, train_df, pmi_vocab)
+    word_to_postag = get_vocab_postags(args, train_df, pmi_vocab)
+    postag_filters = load_postag_filters(args)
+
+    # TODO Input: seeds, --top_k, postag_filters
+    aspect_words = {"POS": set(), "NEG": set()}
+    for polarity in ["POS", "NEG"]:
+        for seed in seeds[polarity]:
+            get_top_pmi_relations
+
+            # TODO: create aspect words with exising information
 
 
 if __name__ == "__main__":
@@ -192,12 +253,17 @@ if __name__ == "__main__":
         type=int,
         default=3,
         help="The window size of PMI cooccurance relations. Default=3.")
-    
+
     parser.add_argument(
         "--token_min_count",
         type=int,
         default=20,
         help="Minimum number of token occurences in corpus. Rare tokens are discarded")
+
+    parser.add_argument(
+        "--use_fine_grained_pos",
+        action="store_true",
+        help="Whether to use fine grained POS tagging results or coarse")
 
     args = parser.parse_args()
     main(args)
