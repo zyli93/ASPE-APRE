@@ -137,3 +137,6 @@ data/
 
 # core
 core
+
+# random pkl files
+*.pkl

@@ -7,6 +7,7 @@
 import os
 import sys
 import argparse
+import spacy
 import pandas as pd
 import ujson as json
 
@@ -54,6 +55,7 @@ def compute_pmi(args, df):
         total_window_counter - the total number of windows in the corpus
         single_counter - the counter of single tokens
         pair_counter - the counter of pair of tokens
+        pmi_vocab - vocabulary of pmi processing
     """
     # TODO: see if vocab should be returned.
 
@@ -69,13 +71,8 @@ def compute_pmi(args, df):
     total_window_counter = 1
 
     text_col = df["text"]
-    for i, line in enumerate(tqdm(text_col)):
-        try:
-            line = line.lower()
-        except:
-            print(i)
-            print(line)
-            sys.exit()
+    for line in tqdm(text_col):
+        line = line.lower()
         for sent in sent_tokenize(line):
             word_tokens = word_tokenize(sent)
             for i in range(0, len(word_tokens) - ws):
@@ -87,31 +84,98 @@ def compute_pmi(args, df):
 
     # build p_i and p_ij and divide them by total_window_counter    
     print("[Annotate] compute PMI ...", end=" ")
+
+    # delete rare tokens as they usually contain misspellings
+    for word in list(single_counter.keys()):
+        freq = single_counter[word]
+        if freq < args.token_min_count:
+            del single_counter[word]
+    
+    # delete pairs with rare tokens
+    for pair in list(pair_counter.keys()):
+        if pair[0] not in single_counter or pair[1] not in single_counter:
+            del pair_counter[pair]
+
     p_i = single_counter.copy()
     p_ij = pair_counter.copy()
     p_i = {key: value / total_window_counter for key, value in p_i.items()}
     p_ij = {key: value / total_window_counter for key, value in p_ij.items()}
 
-    # TODO: first process p_i and p_ij, then discard some rare tokens
-    # TODO: the threshold of rare tokens are still to be decided
-
     # compute PMI, PMI[i,j] = log(P(i,j) / (P(i)*P(j))
     pmi = {key: log(value/(p_i[key[0]] * p_i[key[1]]))
            for key, value in p_ij.items()}
+    dump_pkl(args.path + "/pmi_matrix.dict.pkl", pmi)
+
+    # save pmi vocabularies
+    pmi_vocabs = list(single_counter.keys())
+    dump_pkl(args.path + "/pmi_vocabs.list.pkl", pmi_vocabs)
+
     print("Done!")
+    print("[Annotate] PMI matrix and vocabulary saved in {}".format(args.path))
     
     # TODO: to delete dump_pkl later after verification
     dump_pkl("pmi.pkl", pmi)  # TODO: how to verify this is correct?
 
     dump_pkl("pij.pkl", p_ij)
     dump_pkl("pi.pkl", p_i)
-    return pmi
+
+    dump_pkl("single_counter.pkl", single_counter)
+    dump_pkl("pair_counter.pkl", pair_counter)
+
+    return pmi, pmi_vocabs
+
+
+def get_vocab_pos(args, df, vocab):
+    """Get the Part-of-Speech tagging for vocabulary
+    * What are `pos` and `tag`?
+        - "pos": Coarse-grained part-of-speech from the Universal POS tag set.
+        - "tag": Fine-grained part-of-speech.
+    
+    Args:
+        args - input arguments
+        df - training dataframe
+        vocab - the filtered vocabulary of PMI
+    
+    Return:
+        vocab_pos - [Dict] word -> Dict{"pos": Counter(), "tag": Counter()}
+    """
+    print("[Annotate] processing vocabulary part-of-speech ...", end = " ")
+    vocab_pos = {
+        word: {"pos": Counter(), "tag": Counter()} for word in vocab}
+    vocab = set(vocab)
+    sp = spacy.load("en_core_web_sm")
+    text_col = df["text"]
+    # text -> sentences -> words
+    for line in tqdm(text_col):
+        line = line.lower()
+        for sent in sent_tokenize(line):
+            sp_sent = sp(sent)  # pos tagging with spacy
+            for word in sp_sent:
+                if word.text.lower() in vocab:
+                    vocab_pos[word.text]["pos"].update(word.pos_)
+                    vocab_pos[word.text]["tag"].update(word.tag_)
+    print("Done!")
+
+    print("[Annotate] majority voting for coarse- and fine-grained ...", end=" ")
+    vocab_pos_coarse = {word: vocab_pos[word]["pos"].most_common(1)[0][0]
+                        for word in vocab_pos.keys()}
+    vocab_pos_fine = {word: vocab_pos[word]["tag"].most_common(1)[0][0]
+                        for word in vocab_pos.keys()}
+    print("Done!")
+    return vocab_pos, vocab_pos_coarse, vocab_pos_fine
 
 
 def main(args):
+    # check args.path
+    if not os.path.exists(args.path):
+        raise ValueError("Invalid path {}".format(args.path))
+    if args.path[-1] == "\\":
+        args.path = args.path[:-1]
+
     seeds = load_seed_words()
     train_df = load_train_file(args)
-    compute_pmi(args, train_df)
+    pmi_matrix, pmi_vocab = compute_pmi(args, train_df)
+    get_vocab_pos(args, train_df, pmi_vocab)
 
 
 if __name__ == "__main__":
@@ -128,6 +192,12 @@ if __name__ == "__main__":
         type=int,
         default=3,
         help="The window size of PMI cooccurance relations. Default=3.")
+    
+    parser.add_argument(
+        "--token_min_count",
+        type=int,
+        default=20,
+        help="Minimum number of token occurences in corpus. Rare tokens are discarded")
 
     args = parser.parse_args()
     main(args)

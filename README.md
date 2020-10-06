@@ -49,8 +49,12 @@ pip install -r requirements.txt
     ```python
     >>> import nltk
     >>> nltk.download('punkt')
+    >>> nltk.download('averaged_perceptron_tagger')
     ```
 - `spaCy`
+
+python3 -m spacy download en_core_web_sm
+
 
 ### Preprocessing
 
@@ -98,6 +102,7 @@ The `annotate.py` is in charge of annotating the aspects and corresponding opini
 
 ```text
 usage: annotate.py [-h] --path PATH [--pmi_window_size PMI_WINDOW_SIZE]
+                   [--token_min_count TOKEN_MIN_COUNT]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -105,6 +110,9 @@ optional arguments:
   --pmi_window_size PMI_WINDOW_SIZE
                         The window size of PMI cooccurance relations.
                         Default=3.
+  --token_min_count TOKEN_MIN_COUNT
+                        Minimum number of token occurences in corpus. Rare
+                        tokens are discarded
 ```
 
 Here's an example for parsing the _Digital Music_ dataset for Amazon.
