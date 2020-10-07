@@ -103,6 +103,8 @@ The `annotate.py` is in charge of annotating the aspects and corresponding opini
 ```text
 usage: annotate.py [-h] --path PATH [--pmi_window_size PMI_WINDOW_SIZE]
                    [--token_min_count TOKEN_MIN_COUNT]
+                   [--aspect_candidate_quota_per_seed ASPECT_CANDIDATE_QUOTA_PER_SEED]
+                   [--use_fine_grained_pos]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -111,8 +113,14 @@ optional arguments:
                         The window size of PMI cooccurance relations.
                         Default=3.
   --token_min_count TOKEN_MIN_COUNT
-                        Minimum number of token occurences in corpus. Rare
-                        tokens are discarded
+                        Minimum token occurences in corpus. Rare tokens are
+                        discarded. Default=20.
+  --aspect_candidate_quota_per_seed ASPECT_CANDIDATE_QUOTA_PER_SEED
+                        Number of candidate aspect opinion word to extract per
+                        seed. Default=3.
+  --use_fine_grained_pos
+                        Whether to use fine grained POS tagging results or
+                        coarse.
 ```
 
 Here's an example for parsing the _Digital Music_ dataset for Amazon.
