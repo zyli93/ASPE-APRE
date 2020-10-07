@@ -10,14 +10,14 @@ import argparse
 import spacy
 import pandas as pd
 import ujson as json
-
 from collections import Counter
 from itertools import permutations
 from utils import clean_str2
-from nltk.tokenize import sent_tokenize, word_tokenize
-from nltk import pos_tag
 from tqdm import tqdm
 from math import log
+
+from nltk import pos_tag_sents
+from nltk.tokenize import sent_tokenize, word_tokenize
 
 from utils import dump_pkl
 
@@ -128,9 +128,21 @@ def compute_pmi(args, df):
 
 def get_vocab_postags(args, df, vocab):
     """Get the Part-of-Speech tagging for vocabulary
-    * What are `pos` and `tag`?
-        - "pos": Coarse-grained part-of-speech from the Universal POS tag set.
-        - "tag": Fine-grained part-of-speech.
+
+    * Q: Why use nltk rather than spacy?
+      A: Lessons learned that nltk.pos_tag() is around 18 times faster than 
+         spacy.load("en_core_web_sm").
+
+    * Q: Why use nltk.pos_tag_sents rather than nltk.pos_tag?
+      A: In nltk version 3.5, the doc of nlkt.pos_tag() mentioned that 
+         "NB. Use `pos_tag_sents()` for efficient tagging of more than one sentence."
+
+    * Q: Difference between the outputs of nltk.pos_tag (or nltk.pos_tag_sents) and spacy?
+      A: Spacy generously provides four attributes in the tagged object: .pos, .pos_, .tag, .tag_.
+         "pos" and "tag" refer to two different level of granularities. "pos" is coarse-grained
+         and "tag" is fine-grained. In contrary, nltk only gives fine-grained.
+
+    Based on above three QA's, we use nltk.pos_tag_sents for POS tagging.
 
     Args:
         args - cmd line input arguments
@@ -138,38 +150,35 @@ def get_vocab_postags(args, df, vocab):
         vocab - the filtered vocabulary of PMI
 
     Return:
-        vocab_pos_coarse - [Dict] word (str) -> POS (str)
-        vocab_pos_fine - [Dict] word (str) -> TAG (str)
-        (not returned) vocab_pos - 
-            [Dict] word -> Dict{"pos": Counter(), "tag": Counter()}
+        vocab_pos_majvote - [Dict] majority vote of most popular word pos: {"word": "NN"}.
     """
+    def update_vocab_counter(vocab_pos, token_tuple):
+        token, pos = token_tuple
+        if token in vocab:
+            vocab_pos[token].update([pos])
+
     print("[Annotate] processing vocabulary part-of-speech ...", end=" ")
-    vocab_pos = {
-        word: {"pos": Counter(), "tag": Counter()} for word in vocab}
+
+    vocab_pos = {word: Counter() for word in vocab}
     vocab = set(vocab)
-    # sp = spacy.load("en_core_web_sm")  # commented due to nltk
     text_col = df["text"]
     # text -> sentences -> words
-    for line in tqdm(text_col):
-        line = line.lower()
-        for sent in sent_tokenize(line):
-            # sp_sent = sp(sent)  # pos tagging with spacy
-            pos_tagging = nltk.pos_tag(sent)
-            for word in sp_sent:
-                if word.text.lower() in vocab:
-                    vocab_pos[word.text]["pos"].update(word.pos_)
-                    vocab_pos[word.text]["tag"].update(word.tag_)
+    for text in tqdm(text_col):
+        sents = sent_tokenize(text.lower())
+        # tagged_sents is a list of lists, tokens look like: ("apple", "NN").
+        tagged_sents = pos_tag_sents(map(word_tokenize, sents))
+        # tagged_tokens flattens the list of lists
+        tagged_tokens = [tag_tuple for sublist in tagged_sents 
+                                   for tag_tuple in sublist] 
+        # apply update op on all tagged tokens, use `list()` to make map execute.
+        list(map(lambda tpl: update_vocab_counter(vocab_pos, tpl), tagged_tokens))
     print("Done!")
 
-    print("[Annotate] majority voting for coarse- and fine-grained ...", end=" ")
-    vocab_pos_coarse = {word: vocab_pos[word]["pos"].most_common(1)[0][0]
-                        for word in vocab_pos.keys()}
-    vocab_pos_fine = {word: vocab_pos[word]["tag"].most_common(1)[0][0]
-                      for word in vocab_pos.keys()}
+    print("[Annotate] majority voting for pos-tagging ...", end=" ")
+    vocab_pos_majvote = {word: vocab_pos[word].most_common(1)[0][0] 
+                         for word in vocab_pos.keys()}  # majvote: majority vote
     print("Done!")
-
-    vocab_pos_ret = vocab_pos_fine if args.use_fine_grained_pos else vocab_pos_coarse
-    return vocab_pos_ret
+    return vocab_pos_majvote
 
 
 def load_postag_filters(args):
@@ -202,7 +211,7 @@ def grow_aspect_opinion_words_from_seeds(args, seeds, pos_filters, vocab_postags
         vocab_postags - the POS tags of vocabulary
         pmi_matrix - the PMI matrix
     Returns:
-    
+
     """
     # TODO Input: seeds, --top_k, postag_filters
     print("[Annotate] getting aspect opinion words from seeds ...")
@@ -224,11 +233,13 @@ def grow_aspect_opinion_words_from_seeds(args, seeds, pos_filters, vocab_postags
                 #           (2) r_token has particular POS tag in "filter_pos"
                 if l_token == seed and r_token in vocab_postags and \
                         vocab_postags[r_token] in filters_pos_keep:
-                    match_tokens.append((r_token, vocab_postags[r_token], pmi_value))
+                    match_tokens.append(
+                        (r_token, vocab_postags[r_token], pmi_value))
             match_tokens.sort(reverse=True, key=lambda x: x[2])
             aspect_opinions[polarity][seed] = match_tokens[:quota]
-    
-    dump_pkl("aspect_opinions.pkl", aspect_opinions)  # TODO: remove this or save it elsewhere
+
+    # TODO: remove this or save it elsewhere
+    dump_pkl("aspect_opinions.pkl", aspect_opinions)
     print("Done!")
 
     return aspect_opinions
@@ -254,7 +265,7 @@ def main(args):
     grow_aspect_opinion_words_from_seeds(
         args,
         seeds=seeds,
-        pos_filters=postag_filters, 
+        pos_filters=postag_filters,
         vocab_postags=word_to_postag,
         pmi_matrix=pmi_matrix)
 
@@ -286,11 +297,10 @@ if __name__ == "__main__":
         default=100,
         help="Number of candidate aspect opinion word to extract per seed. Default=3.")
 
-
     parser.add_argument(
         "--use_fine_grained_pos",
         action="store_true",
-        help="Whether to use fine grained POS tagging results or coarse. " + 
+        help="Whether to use fine grained POS tagging results or coarse. " +
              "If given, use fine-grained.")
 
     args = parser.parse_args()
