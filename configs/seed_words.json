@@ -1,52 +1,34 @@
 {
     "POS":[
-        "great",
-        "good",
-        "like",
-        "just",
-        "will",
-        "well",
-        "even",
-        "love",
-        "best",
-        "better",
-        "back",
-        "want",
-        "recommend",
-        "worth",
-        "easy",
-        "sound",
-        "right",
-        "excellent",
-        "nice",
-        "real",
-        "fun",
-        "sure",
-        "pretty",
-        "interesting",
-        "stars"
+        "great", "good", "like",
+        "will", "well", "love",
+        "best", "better", "want",
+        "recommend", "worth", "easy", 
+        "sound", "right", "excellent",
+        "nice", "real", "fun",
+        "sure", "pretty", "interesting",
+        "stars",
+
+        "perfect", "enjoy", "lovely"
     ],
     "NEG":[
-        "too",
-        "little",
-        "bad",
+        "too", "little", "bad", "down",
+        "hard", "waste", "disappointed",
+        "problem", "poor", "less", "boring",
+        "worst", "trying", "wrong", "least",
+        "although", "problems", "cheap",
+
+        "unhappy", "dislike", "hate"
+    ],
+    "DELETED_POS": [
+        "just",
+        "even",
+        "back"
+    ],
+    "DELETED_NEG": [
         "game",
-        "down",
         "long",
-        "hard",
-        "waste",
-        "disappointed",
-        "problem",
-        "try",
-        "poor",
-        "less",
-        "boring",
-        "worst",
-        "trying",
-        "wrong",
-        "least",
-        "although",
-        "problems",
-        "cheap"
+        "try"
     ]
+
 }

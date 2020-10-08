@@ -18,8 +18,9 @@ from math import log
 
 from nltk import pos_tag_sents
 from nltk.tokenize import sent_tokenize, word_tokenize
+from nltk.corpus import words
 
-from utils import dump_pkl
+from utils import dump_pkl, load_pkl
 
 
 def load_train_file(args):
@@ -45,6 +46,16 @@ def load_seed_words():
             "Config has to include all POS and NEG")
     print("Done!")
     return seed_words
+
+
+def load_postag_filters(args):
+    """load pos tag filters"""
+    grain = "fine"
+    pos_json = "./configs/fine_grained.pos.json"
+    with open(pos_json, "r") as fin:
+        pos_filters = json.load(fin)
+    print("[Annotate] using {}-grained POS tags".format(grain))
+    return pos_filters
 
 
 def compute_pmi(args, df):
@@ -175,81 +186,97 @@ def get_vocab_postags(args, df, vocab):
     print("Done!")
 
     print("[Annotate] majority voting for pos-tagging ...", end=" ")
-    vocab_pos_majvote = {word: vocab_pos[word].most_common(1)[0][0] 
-                         for word in vocab_pos.keys()}  # majvote: majority vote
+    # TODO: to be uncommented later
+    # vocab_pos_majvote = {word: vocab_pos[word].most_common(1)[0][0] 
+    #                      for word in vocab_pos.keys()}  # majvote: majority vote
+    vocab_pos_majvote = {}
+    for word in vocab_pos:
+        try:
+            vocab_pos_majvote[word] = vocab_pos[word].most_common(1)[0][0]
+        except:
+            print(vocab_pos[word])
+
+    # TODO: save vocab_pos_majvote
+    dump_pkl(args.path + "/postag_of_vocabulary.pkl", vocab_pos_majvote)
     print("Done!")
+    print("[Annotate] results saved at {}/postag_of_vocabulary.pkl".format(args.path))
     return vocab_pos_majvote
 
 
-def load_postag_filters(args):
-    """load pos tag filters"""
-    if args.use_fine_grained_pos:
-        grain = "fine"
-        pos_json = "./configs/fine_grained.pos.json"
-    else:
-        grain = "coarse"
-        pos_json = "./configs/coarse_grained.pos.json"
-    with open(pos_json, "r") as fin:
-        pos_filters = json.load(fin)
-    print("[Annotate] using {}-grained POS tags".format(grain))
-    return pos_filters
+def compute_vocab_polarity_from_seeds(args, seeds, postag_filters, vocab_postags, pmi_matrix):
+    """ "Grow" (generate) aspect words from seeds for both aspects (pos/neg). 
+    Get token polarity based on PMI values.
 
+    Current plan: 
+        (1) filter the needed POS (given by `postag_filters`)
+        (2) sort only with certain POS.
 
-def grow_aspect_opinion_words_from_seeds(args, seeds, pos_filters, vocab_postags, pmi_matrix):
-    """ "Grow" (generate) aspect words from seeds for both aspects (pos/neg)
-
-    Get top PMI related words
-
-    Current plan: First filter the needed POS, 
-                  then sort only with certain POS.
+    TODO: If a lot of tokens are not in PMI-matrix, we need to increase the window size.
 
     Args:
         args - cmd line input arguments
         seeds - [Dict] the seed words. {"POS": ["pos_1", ...], "NEG": ["neg_1", ...]}
         quota - the number of related words to return
-        filter_pos - the filters of POS tags. {"keep": ["ADV", ...], "discard": ["NN",...]}
+        postag_filters - [Set] the filters of POS tags. POS tags to keep only. 
+            `None` for not using filters.
         vocab_postags - the POS tags of vocabulary
         pmi_matrix - the PMI matrix
     Returns:
 
     """
-    # TODO Input: seeds, --top_k, postag_filters
-    print("[Annotate] getting aspect opinion words from seeds ...")
-    quota = args.aspect_candidate_quota_per_seed
-    filters_pos_keep = set(pos_filters["keep"])  # the POS tags to keep
-    aspect_opinions = {}
+    print("[Annotate] computing aspect-sentiment words polarity from seeds ...", end=" ")
+    if postag_filters and not isinstance(postag_filters, set):
+        postag_filters = set(postag_filters)  # postag_filters contains the POS tags to keep
 
-    # TODO: to catch up:
-    #       (1) use nltk.pos_tag_sents() to tag sentences (rather than spacy)
-    #       (2) program run into bugs (left iterm)
+    # candidate sentiment word polarity
+    cand_senti_pol = []
 
-    for polarity in ["POS", "NEG"]:
-        aspect_opinions[polarity] = {}
-        for seed in seeds[polarity]:
-            match_tokens = []
-            for (l_token, r_token), pmi_value in pmi_matrix.items():
-                # TODO: verify the vocab_postags, it is possible that r_token not in vocab_postags
-                # criteria: (1) r_token in vocab_postags
-                #           (2) r_token has particular POS tag in "filter_pos"
-                if l_token == seed and r_token in vocab_postags and \
-                        vocab_postags[r_token] in filters_pos_keep:
-                    match_tokens.append(
-                        (r_token, vocab_postags[r_token], pmi_value))
-            match_tokens.sort(reverse=True, key=lambda x: x[2])
-            aspect_opinions[polarity][seed] = match_tokens[:quota]
+    pos_seeds, neg_seeds = seeds["POS"], seeds["NEG"]
+
+    # guaranteed that words in vocab_postags also in pmi_matrix
+    for word in tqdm(vocab_postags.keys()):
+        if postag_filters and vocab_postags[word] not in postag_filters:
+            continue
+        pos_pmi = [pmi_matrix.get((pos_seed, word), 0) for pos_seed in pos_seeds]
+        neg_pmi = [pmi_matrix.get((neg_seed, word), 0) for neg_seed in neg_seeds]
+        mean_pos_pmi = sum(pos_pmi) / len(pos_pmi) 
+        mean_neg_pmi = sum(neg_pmi) / len(neg_pmi)
+        polarity = mean_pos_pmi - mean_neg_pmi
+        cand_senti_pol.append((word, vocab_postags[word], polarity, mean_pos_pmi, mean_neg_pmi))
+    cand_senti_pol.sort(reverse=True, key=lambda x: x[2])
+    cand_df = pd.DataFrame(cand_senti_pol, 
+        columns=["word", "POS", "polarity", "Mean Positive PMI", "Mean Negative PMI"])
+    
+    cand_df.to_csv(args.path + "/cand_senti_pol.csv", index=False)
 
     # TODO: remove this or save it elsewhere
-    dump_pkl("aspect_opinions.pkl", aspect_opinions)
     print("Done!")
+    print("[Annotate] vocab polarity saved at {}/cand_senti_pol.csv".format(args.path))
 
-    return aspect_opinions
+    return cand_df
+
+
+# TODO: merge compute polarity words and remove invalid words later!
+def remove_invalid_words(args, word_list):
+    """Remove invalid words in the word list dataframe 
+    
+    Args:
+        word_list - the dataframe of words
+    """
+    print("[Annotate] removing invalid words ...", end=" ")
+    assert isinstance(word_list, pd.DataFrame), "word_chart should be a dataframe"
+    valid_word_list = word_list[word_list["word"].isin(words.words())]
+    valid_word_list.to_csv(args.path + "/valid_cand_senti_pol.csv", index=False)
+    print("Done!")
+    print("[Annotate] valid vocab saved at {}/valid_cand_senti_pol.csv".format(args.path))
+    return valid_word_list
 
 
 def main(args):
     # check args.path
     if not os.path.exists(args.path):
         raise ValueError("Invalid path {}".format(args.path))
-    if args.path[-1] == "\\":
+    if args.path[-1] == "\/":
         args.path = args.path[:-1]
 
     # load config files
@@ -258,16 +285,27 @@ def main(args):
     postag_filters = load_postag_filters(args)
 
     # compute PMI and POS tag
+    # TODO: uncomment later
     pmi_matrix, pmi_vocab = compute_pmi(args, train_df)
     word_to_postag = get_vocab_postags(args, train_df, pmi_vocab)
 
+    # pmi_matrix = load_pkl(args.path + "/pmi_matrix.dict.pkl")
+    # pmi_vocab = load_pkl(args.path + "/pmi_vocabs.list.pkl")
+    # word_to_postag = load_pkl(args.path + "/postag_of_vocabulary.pkl")
+
     # generate opinion words
-    grow_aspect_opinion_words_from_seeds(
+    word_pol_df = compute_vocab_polarity_from_seeds(
         args,
         seeds=seeds,
-        pos_filters=postag_filters,
+        postag_filters=postag_filters['keep'],
         vocab_postags=word_to_postag,
         pmi_matrix=pmi_matrix)
+    remove_invalid_words(args, word_pol_df)
+
+    
+    # get polarity here!
+    # maybe add spell check!
+    # quota = args.aspect_candidate_quota_per_seed
 
 
 if __name__ == "__main__":
@@ -296,12 +334,6 @@ if __name__ == "__main__":
         type=int,
         default=100,
         help="Number of candidate aspect opinion word to extract per seed. Default=3.")
-
-    parser.add_argument(
-        "--use_fine_grained_pos",
-        action="store_true",
-        help="Whether to use fine grained POS tagging results or coarse. " +
-             "If given, use fine-grained.")
 
     args = parser.parse_args()
     main(args)

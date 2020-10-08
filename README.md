@@ -4,14 +4,14 @@ Rating prediction with Unsupervised Aspect-level Review Analysis (RUARA)
 ## The TODO list
 
 - [ ] implement user review aggregation and item review aggregation for Amazon & Yelp (in annotate.py)
-- [ ] add dependency info for nlp toolkits such as nltk and spaCy
-- [ ] check if the strings need better processing?
+- [x] add dependency info for nlp toolkits such as nltk and spaCy
+- [x] check if the strings need better processing?
 - [x] filter out too long or too short reviews
 - [ ] pmi compute error in TagGCN because `combinations()` doesn't consider order
 - [x] preprocessing code cannot deal with text = `NaN`
 - [ ] put in note that order by speed: 
     nothing > clean_str w/o spellcheck (sc) > clean_str w/ sc
-- [ ] another package `autocorrect` works faster than SpellChecker
+- [x] another package `autocorrect` works faster than SpellChecker
 - [ ] maybe the original text should also be kept for Dependency Parsing.
 
 ## Data
@@ -50,10 +50,13 @@ pip install -r requirements.txt
     >>> import nltk
     >>> nltk.download('punkt')
     >>> nltk.download('averaged_perceptron_tagger')
+    >>> nltk.download('words')
     ```
-- `spaCy`
-
-python3 -m spacy download en_core_web_sm
+- `spaCy`:
+  - install pos tagging package in shell
+    ```bash
+    python3 -m spacy download en_core_web_sm
+    ```
 
 
 ### Preprocessing
@@ -127,6 +130,14 @@ Here's an example for parsing the _Digital Music_ dataset for Amazon.
 ```
 python src/annotate.py --path=./data/amazon/digital_music
 ```
+
+Here's the annotation pipeline in `annotate.py`:
+
+1. Load dataset and hard-coded files: POS tags as filters of aspect sentiment (`fine_grained.pos.json`) and seed words for sentiment words (`seed_words.json`).
+2. Compute PMI of existing word pairs in the corpus.
+3. Run POS tagging provided by NLTK and take the most popular POS as a words POS.
+4. Compute modifier words' polarity using the method in SKEP.
+5. Remove the tokens that aren't valid words.
 
 
 ### Run with Docker
