@@ -173,6 +173,11 @@ def get_vocab_postags(args, df, vocab):
 
     print("[Annotate] processing vocabulary part-of-speech ...", end=" ")
 
+    # TODO: fix wrong POS taggings
+    #       1. use original text (with capital) to do pos tagging
+    #       2. before save, do lower
+    #       3. change "^ - = + / \ " needs to be changed to " " in original text
+
     vocab_pos = {word: Counter() for word in vocab}
     vocab = set(vocab)
     text_col = df["text"]
