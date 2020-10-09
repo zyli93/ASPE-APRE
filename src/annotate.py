@@ -10,6 +10,7 @@ import argparse
 import spacy
 import pandas as pd
 import ujson as json
+import re
 from collections import Counter
 from itertools import permutations
 from utils import clean_str2
@@ -69,13 +70,9 @@ def compute_pmi(args, df):
         pair_counter - the counter of pair of tokens
         pmi_vocab - vocabulary of pmi processing
     """
-    # TODO: see if vocab should be returned.
-
     if not hasattr(args, "pmi_window_size"):
         raise AttributeError("--pmi_window_size has to be specified!")
     print("[Annotate] compute P(i) and P(i,j) ...", end=" ")
-
-    # TODO: to discard the rare tokens as they are incorrect!
 
     # initialize counters
     ws = args.pmi_window_size
@@ -171,40 +168,41 @@ def get_vocab_postags(args, df, vocab):
         if token in vocab:
             vocab_pos[token].update([pos])
 
-    print("[Annotate] processing vocabulary part-of-speech ...", end=" ")
+    def rough_clean(s):
+        """change ^-=+/\\ to " " in text as the pos tagger doesn't handle it"""
+        s = re.sub(r"\^|-|=|\+|\/", " ", s)
+        s = re.sub(r"\\", " ", s)
+        return s
 
-    # TODO: fix wrong POS taggings
-    #       1. use original text (with capital) to do pos tagging
-    #       2. before save, do lower
-    #       3. change "^ - = + / \ " needs to be changed to " " in original text
+    print("[Annotate] processing vocabulary part-of-speech ...", end=" ")
 
     vocab_pos = {word: Counter() for word in vocab}
     vocab = set(vocab)
-    text_col = df["text"]
+
+    # use original text (with cases) to do pos tagging for better accuracy
+    original_text_col = df["original_text"]
+
     # text -> sentences -> words
-    for text in tqdm(text_col):
-        sents = sent_tokenize(text.lower())
+    for text in tqdm(original_text_col):
+
+        # sents is un-lowered and roughly processed (certain punctation removed) 
+        #   text for more accurate POS tagging
         # tagged_sents is a list of lists, tokens look like: ("apple", "NN").
+        # tagged_tokens flattens the list of lists, lower it before save
+        sents = list(map(rough_clean, sent_tokenize(text)))
         tagged_sents = pos_tag_sents(map(word_tokenize, sents))
-        # tagged_tokens flattens the list of lists
-        tagged_tokens = [tag_tuple for sublist in tagged_sents 
-                                   for tag_tuple in sublist] 
+        tagged_tokens = [(tag_tuple[0].lower(), tag_tuple[1]) 
+            for sublist in tagged_sents for tag_tuple in sublist]
+
         # apply update op on all tagged tokens, use `list()` to make map execute.
         list(map(lambda tpl: update_vocab_counter(vocab_pos, tpl), tagged_tokens))
     print("Done!")
 
     print("[Annotate] majority voting for pos-tagging ...", end=" ")
-    # TODO: to be uncommented later
-    # vocab_pos_majvote = {word: vocab_pos[word].most_common(1)[0][0] 
-    #                      for word in vocab_pos.keys()}  # majvote: majority vote
     vocab_pos_majvote = {}
     for word in vocab_pos:
-        try:
+        if len(vocab_pos[word]):
             vocab_pos_majvote[word] = vocab_pos[word].most_common(1)[0][0]
-        except:
-            print(vocab_pos[word])
-        
-    dump_pkl(args.path + "/postag_of_vocab_full.pkl", vocab_pos)  # TODO: to remove this
 
     dump_pkl(args.path + "/postag_of_vocabulary.pkl", vocab_pos_majvote)
     print("Done!")
@@ -220,8 +218,6 @@ def compute_vocab_polarity_from_seeds(args, seeds, postag_filters, vocab_postags
         (1) filter the needed POS (given by `postag_filters`)
         (2) sort only with certain POS.
 
-    TODO: If a lot of tokens are not in PMI-matrix, we need to increase the window size.
-
     Args:
         args - cmd line input arguments
         seeds - [Dict] the seed words. {"POS": ["pos_1", ...], "NEG": ["neg_1", ...]}
@@ -235,7 +231,8 @@ def compute_vocab_polarity_from_seeds(args, seeds, postag_filters, vocab_postags
     """
     print("[Annotate] computing aspect-sentiment words polarity from seeds ...", end=" ")
     if postag_filters and not isinstance(postag_filters, set):
-        postag_filters = set(postag_filters)  # postag_filters contains the POS tags to keep
+        # postag_filters contains the POS tags to keep
+        postag_filters = set(postag_filters)
 
     # candidate sentiment word polarity
     cand_senti_pol = []
@@ -246,9 +243,11 @@ def compute_vocab_polarity_from_seeds(args, seeds, postag_filters, vocab_postags
     for word in tqdm(vocab_postags.keys()):
         if postag_filters and vocab_postags[word] not in postag_filters:
             continue
-        pos_pmi = [pmi_matrix.get((pos_seed, word), 0) for pos_seed in pos_seeds]
-        neg_pmi = [pmi_matrix.get((neg_seed, word), 0) for neg_seed in neg_seeds]
-        mean_pos_pmi = sum(pos_pmi) / len(pos_pmi) 
+        pos_pmi = [pmi_matrix.get((pos_seed, word), 0)
+                   for pos_seed in pos_seeds]
+        neg_pmi = [pmi_matrix.get((neg_seed, word), 0)
+                   for neg_seed in neg_seeds]
+        mean_pos_pmi = sum(pos_pmi) / len(pos_pmi)
         mean_neg_pmi = sum(neg_pmi) / len(neg_pmi)
         polarity = mean_pos_pmi - mean_neg_pmi
 
@@ -256,31 +255,33 @@ def compute_vocab_polarity_from_seeds(args, seeds, postag_filters, vocab_postags
         if pos_pmi.count(0) + neg_pmi.count(0) > 0.8 * (len(pos_pmi) + len(neg_pmi)):
             continue
 
-        cand_senti_pol.append((word, vocab_postags[word], polarity, mean_pos_pmi, mean_neg_pmi))
+        cand_senti_pol.append(
+            (word, vocab_postags[word], polarity, mean_pos_pmi, mean_neg_pmi))
     cand_senti_pol.sort(reverse=True, key=lambda x: x[2])
-    cand_df = pd.DataFrame(cand_senti_pol, 
-        columns=["word", "POS", "polarity", "Mean Positive PMI", "Mean Negative PMI"])
-    
+    cand_df = pd.DataFrame(cand_senti_pol,
+                           columns=["word", "POS", "polarity", "Mean Positive PMI", "Mean Negative PMI"])
+
     cand_df.to_csv(args.path + "/cand_senti_pol.csv", index=False)
 
-    # TODO: remove this or save it elsewhere
     print("Done!")
     print("[Annotate] vocab polarity saved at {}/cand_senti_pol.csv".format(args.path))
 
     return cand_df
 
 
-# TODO: merge compute polarity words and remove invalid words later!
 def remove_invalid_words(args, word_list):
-    """Remove invalid words in the word list dataframe 
-    
+    """Remove invalid words in the word list dataframe.
+    We used nltk.corpus.words API as it returns a valid English word dictionary.
+
     Args:
         word_list - the dataframe of words
     """
     print("[Annotate] removing invalid words ...", end=" ")
-    assert isinstance(word_list, pd.DataFrame), "word_chart should be a dataframe"
+    assert isinstance(
+        word_list, pd.DataFrame), "word_chart should be a dataframe"
     valid_word_list = word_list[word_list["word"].isin(words.words())]
-    valid_word_list.to_csv(args.path + "/valid_cand_senti_pol.csv", index=False)
+    valid_word_list.to_csv(
+        args.path + "/valid_cand_senti_pol.csv", index=False)
     print("Done!")
     print("[Annotate] valid vocab saved at {}/valid_cand_senti_pol.csv".format(args.path))
     return valid_word_list
@@ -299,10 +300,10 @@ def main(args):
     postag_filters = load_postag_filters(args)
 
     # compute PMI and POS tag
-    # TODO: uncomment later
     pmi_matrix, pmi_vocab = compute_pmi(args, train_df)
     word_to_postag = get_vocab_postags(args, train_df, pmi_vocab)
 
+    # TODO: to be removed later
     # pmi_matrix = load_pkl(args.path + "/pmi_matrix.dict.pkl")
     # pmi_vocab = load_pkl(args.path + "/pmi_vocabs.list.pkl")
     # word_to_postag = load_pkl(args.path + "/postag_of_vocabulary.pkl")
@@ -316,9 +317,6 @@ def main(args):
         pmi_matrix=pmi_matrix)
     remove_invalid_words(args, word_pol_df)
 
-    # TODO: read the PMI post, think about relate between PMI and actual word
-
-    
     # get polarity here!
     # maybe add spell check!
     # quota = args.aspect_candidate_quota_per_seed

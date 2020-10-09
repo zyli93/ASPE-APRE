@@ -9,10 +9,13 @@ Rating prediction with Unsupervised Aspect-level Review Analysis (RUARA)
 - [x] filter out too long or too short reviews
 - [ ] pmi compute error in TagGCN because `combinations()` doesn't consider order
 - [x] preprocessing code cannot deal with text = `NaN`
-- [ ] put in note that order by speed: 
+- [x] put in note that order by speed: 
     nothing > clean_str w/o spellcheck (sc) > clean_str w/ sc
 - [x] another package `autocorrect` works faster than SpellChecker
-- [ ] maybe the original text should also be kept for Dependency Parsing.
+- [x] maybe the original text should also be kept for Dependency Parsing.
+- [x] add discussion about window size
+- [x] add example of result of PMI annotation
+- [x] add notes for deleting RB and using JJ only
 
 ## Data
 
@@ -133,11 +136,30 @@ Here's the annotation pipeline in `annotate.py`:
 1. Load dataset and hard-coded files: POS tags as filters of aspect sentiment (`fine_grained.pos.json`) and seed words for sentiment words (`seed_words.json`).
 2. Compute PMI of existing word pairs in the corpus.
 3. Run POS tagging provided by NLTK and take the most popular POS as a words POS.
-4. Compute modifier words' polarity using the method in SKEP.
+4. Compute modifier words' polarity using the method in SKEP. Only `JJ` are considered modifiers. Refer to `./configs/fine_grained.pos.json".
 5. Remove the tokens that aren't valid words.
 
+Here are the top 15 sentiment words extracted by our PMI-based method. We can see most words are quick possitive. But two types of outliers exsit in this list. One, non-words (i.e., "ur"). Two, negative words (i.e., "reckless"). The existence of negative words is strongly due to the certain selection of seeds.
+```
+word            ,POS ,polarity                ,Mean Positive PMI      ,Mean Negative PMI
+clear           ,JJ  ,0.5840987462540387      ,-0.19650273081066164   ,-0.7806014770647003
+great           ,JJ  ,0.5489023712339772      ,-0.20450911693587362   ,-0.7534114881698508
+believable      ,JJ  ,0.486272530389566       ,0.486272530389566      ,0.0
+good            ,JJ  ,0.48500002838557305     ,0.022995079620155488   ,-0.46200494876541753
+excellent       ,JJ  ,0.35263876072657313     ,-0.3218579276588113    ,-0.6744966883853845
+ur              ,JJ  ,0.34734304468895105     ,0.36018580798898425    ,0.012842763300033195
+unbelievable    ,JJ  ,0.3467458825426481      ,0.2899629017690204     ,-0.056782980773627714
+mushy           ,JJ  ,0.3212031175587027      ,0.42669711225563556    ,0.10549399469693288
+reckless        ,JJ  ,0.26206888751325863     ,0.3109020229148935     ,0.04883313540163484
+amazing         ,JJ  ,0.2589900139290045      ,-0.37184520235735957   ,-0.6308352162863641
+beautiful       ,JJ  ,0.25721300991552554     ,-0.5456226782054189    ,-0.8028356881209444
+nice            ,JJ  ,0.2568078689974637      ,-0.20424132281965768   ,-0.4610491918171214
+much            ,JJ  ,0.23952869087514955     ,-0.23410520554168252   ,-0.47363389641683207
+awesome         ,JJ  ,0.22824133572268956     ,-0.2510182876984033    ,-0.47925962342109285
+```
 
-**Notes**:
+
+**Notes and Discussions**:
  1. If `--pmi_window_size` is increased, then `--token_min_count` should be increased as well to remove rare tokens. Usually, these rare tokens come from 
   misspelling of users of review sites.
 

@@ -163,6 +163,7 @@ def parse_yelp(args):
             review_uids.append(new_uid)
 
             # TODO: add preprocess text here!
+            # TODO: modify code to comply with Amazon
             processed_text = process_text(data['text'])
 
             # NOTE: new_uid and new_bid are `u_[user_idx]` and `b_[bus_idx]`.
@@ -285,7 +286,6 @@ def parse_amazon(args):
                 "rating": float(data['overall']),
                 "text": processed_text,
                 "original_text": data['reviewText']}
-            # TODO: to remove the original_text column later
 
             dataset_entries.append(entry)
 
