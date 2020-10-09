@@ -80,15 +80,18 @@ def compute_pmi(args, df):
     # initialize counters
     ws = args.pmi_window_size
     single_counter, pair_counter = Counter(), Counter()
-    total_window_counter = 1
+    total_window_counter = 0
 
     text_col = df["text"]
     for line in tqdm(text_col):
         line = line.lower()
         for sent in sent_tokenize(line):
             word_tokens = word_tokenize(sent)
-            for i in range(0, len(word_tokens) - ws):
-                token_window = word_tokens[i: i+ws]
+            # win_size=3, sent="a b c d" => windows = ["a b c", "b c d"]
+            # win_size=3, sent="a b" => windows = ["a b"]
+            for i in range(0, max(len(word_tokens)+1-ws, 1)):
+                end = min(i+ws, len(word_tokens))
+                token_window = word_tokens[i: end]
                 single_counter.update(token_window)
                 pair_counter.update(permutations(token_window, 2))
                 total_window_counter += 1
@@ -195,8 +198,9 @@ def get_vocab_postags(args, df, vocab):
             vocab_pos_majvote[word] = vocab_pos[word].most_common(1)[0][0]
         except:
             print(vocab_pos[word])
+        
+    dump_pkl(args.path + "/postag_of_vocab_full.pkl", vocab_pos)  # TODO: to remove this
 
-    # TODO: save vocab_pos_majvote
     dump_pkl(args.path + "/postag_of_vocabulary.pkl", vocab_pos_majvote)
     print("Done!")
     print("[Annotate] results saved at {}/postag_of_vocabulary.pkl".format(args.path))
@@ -242,6 +246,11 @@ def compute_vocab_polarity_from_seeds(args, seeds, postag_filters, vocab_postags
         mean_pos_pmi = sum(pos_pmi) / len(pos_pmi) 
         mean_neg_pmi = sum(neg_pmi) / len(neg_pmi)
         polarity = mean_pos_pmi - mean_neg_pmi
+
+        # remove words with little references with both sides of seeds
+        if pos_pmi.count(0) + neg_pmi.count(0) > 0.8 * (len(pos_pmi) + len(neg_pmi)):
+            continue
+
         cand_senti_pol.append((word, vocab_postags[word], polarity, mean_pos_pmi, mean_neg_pmi))
     cand_senti_pol.sort(reverse=True, key=lambda x: x[2])
     cand_df = pd.DataFrame(cand_senti_pol, 
@@ -301,6 +310,8 @@ def main(args):
         vocab_postags=word_to_postag,
         pmi_matrix=pmi_matrix)
     remove_invalid_words(args, word_pol_df)
+
+    # TODO: read the PMI post, think about relate between PMI and actual word
 
     
     # get polarity here!

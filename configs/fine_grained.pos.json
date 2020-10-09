@@ -2,10 +2,7 @@
     "keep":[
         "JJ",
         "JJR",
-        "JJS",
-        "RB",
-        "RBR",
-        "RBS"
+        "JJS"
     ],
     "discard":[
         "CC",
@@ -36,6 +33,9 @@
         "WDT",
         "WP",
         "WP$",
-        "WRB"
+        "WRB",
+        "RB",
+        "RBR",
+        "RBS"
     ]
 }

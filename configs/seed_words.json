@@ -8,27 +8,30 @@
         "nice", "real", "fun",
         "sure", "pretty", "interesting",
         "stars",
-
-        "perfect", "enjoy", "lovely"
-    ],
-    "NEG":[
-        "too", "little", "bad", "down",
-        "hard", "waste", "disappointed",
-        "problem", "poor", "less", "boring",
-        "worst", "trying", "wrong", "least",
-        "although", "problems", "cheap",
-
-        "unhappy", "dislike", "hate"
-    ],
-    "DELETED_POS": [
         "just",
         "even",
         "back"
     ],
-    "DELETED_NEG": [
+    "NEG":[
+        "too", "little", "bad", "down",
+        "hard", "waste", 
+        "problem", 
+        "less", "boring",
+        "worst", "trying", "wrong", "least",
+        "although", "problems", "cheap",
         "game",
         "long",
-        "try"
+        "try",
+
+        "however", "opposite", "yet", "rough"
+
+    ],
+    "DELETED_POS": [
+        "perfect", "enjoy", "lovely"
+    ],
+    "DELETED_NEG": [
+        "unhappy", "dislike", "hate",
+        "disappointed", "poor"
     ]
 
 }

@@ -121,9 +121,6 @@ optional arguments:
   --aspect_candidate_quota_per_seed ASPECT_CANDIDATE_QUOTA_PER_SEED
                         Number of candidate aspect opinion word to extract per
                         seed. Default=3.
-  --use_fine_grained_pos
-                        Whether to use fine grained POS tagging results or
-                        coarse.
 ```
 
 Here's an example for parsing the _Digital Music_ dataset for Amazon.
@@ -138,6 +135,11 @@ Here's the annotation pipeline in `annotate.py`:
 3. Run POS tagging provided by NLTK and take the most popular POS as a words POS.
 4. Compute modifier words' polarity using the method in SKEP.
 5. Remove the tokens that aren't valid words.
+
+
+**Notes**:
+ 1. If `--pmi_window_size` is increased, then `--token_min_count` should be increased as well to remove rare tokens. Usually, these rare tokens come from 
+  misspelling of users of review sites.
 
 
 ### Run with Docker
