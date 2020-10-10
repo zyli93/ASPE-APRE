@@ -16,6 +16,7 @@ Rating prediction with Unsupervised Aspect-level Review Analysis (RUARA)
 - [x] add discussion about window size
 - [x] add example of result of PMI annotation
 - [x] add notes for deleting RB and using JJ only
+- [ ] add gensim with glove embedding
 
 ## Data
 
