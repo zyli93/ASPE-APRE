@@ -140,3 +140,6 @@ core
 
 # random pkl files
 *.pkl
+
+# test file `src/test.py`
+src/test.py

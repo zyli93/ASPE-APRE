@@ -204,6 +204,7 @@ def get_vocab_postags(args, df, vocab):
         if len(vocab_pos[word]):
             vocab_pos_majvote[word] = vocab_pos[word].most_common(1)[0][0]
 
+    dump_pkl(args.path + "/postag_of_vocabulary_full.pkl", vocab_pos)
     dump_pkl(args.path + "/postag_of_vocabulary.pkl", vocab_pos_majvote)
     print("Done!")
     print("[Annotate] results saved at {}/postag_of_vocabulary.pkl".format(args.path))
@@ -309,6 +310,8 @@ def main(args):
     # word_to_postag = load_pkl(args.path + "/postag_of_vocabulary.pkl")
 
     # generate opinion words
+    print(word_to_postag['dial'])
+    print(word_to_postag['lead'])
     word_pol_df = compute_vocab_polarity_from_seeds(
         args,
         seeds=seeds,

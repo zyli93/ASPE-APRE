@@ -110,7 +110,6 @@ The `annotate.py` is in charge of annotating the aspects and corresponding opini
 usage: annotate.py [-h] --path PATH [--pmi_window_size PMI_WINDOW_SIZE]
                    [--token_min_count TOKEN_MIN_COUNT]
                    [--aspect_candidate_quota_per_seed ASPECT_CANDIDATE_QUOTA_PER_SEED]
-                   [--use_fine_grained_pos]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -136,7 +135,7 @@ Here's the annotation pipeline in `annotate.py`:
 1. Load dataset and hard-coded files: POS tags as filters of aspect sentiment (`fine_grained.pos.json`) and seed words for sentiment words (`seed_words.json`).
 2. Compute PMI of existing word pairs in the corpus.
 3. Run POS tagging provided by NLTK and take the most popular POS as a words POS.
-4. Compute modifier words' polarity using the method in SKEP. Only `JJ` are considered modifiers. Refer to `./configs/fine_grained.pos.json".
+4. Compute modifier words' polarity using the method in SKEP. Only `JJ` are considered modifiers. Refer to `./configs/fine_grained.pos.json`.
 5. Remove the tokens that aren't valid words.
 
 Here are the top 15 sentiment words extracted by our PMI-based method. We can see most words are quick possitive. But two types of outliers exsit in this list. One, non-words (i.e., "ur"). Two, negative words (i.e., "reckless"). The existence of negative words is strongly due to the certain selection of seeds.
