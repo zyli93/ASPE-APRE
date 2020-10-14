@@ -7,6 +7,8 @@ from utils import utils, datautils
 from utils.loggingutils import init_logging
 import logging
 
+import tensorflow as tf
+
 
 def __train(word_vecs_file, train_tok_texts_file, train_sents_file, train_valid_split_file, test_tok_texts_file,
             test_sents_file, load_model_file, task):
@@ -40,8 +42,23 @@ def __train(word_vecs_file, train_tok_texts_file, train_sents_file, train_valid_
     model.train(train_data, valid_data, test_data, vocab, n_epochs=n_epochs, lr=lr, dst_aspects_file=dst_aspects_file,
                 dst_opinions_file=dst_opinions_file)
     
-    """Zeyu's change:"""
+    """Zeyu's change, start"""
     # TODO: add save model
+
+    # set working directory and create dir to save model
+    WORD_DIR = "./extractors/RINANTE/"
+    os.makedirs(WORD_DIR + "saved_model", exist_ok=True)
+
+    # save model
+    print("[ZL] saving the model", end=" ")
+    saver = tf.train.Saver()
+    saver_id = "ep{}-".format(n_epochs)
+    with tf.Session() as sess:
+        saver.save(sess, saver_id)  # TODO: name an ID
+
+    print("Done!")
+
+    """Zeyu's change, end"""
     
 
 

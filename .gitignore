@@ -144,8 +144,11 @@ core
 # test file `src/test.py`
 src/test.py
 
-# baseline models
+# extractor models
 extractors/RINANTE/core
 extractors/RINANTE/log
 extractors/RINANTE/rinante-data
 extractors/RINANTE/rinante-data.zip
+
+extractors/SDRN/bert/
+extractors/SDRN/data/

@@ -163,6 +163,15 @@ awesome         ,JJ  ,0.22824133572268956     ,-0.2510182876984033    ,-0.479259
  1. If `--pmi_window_size` is increased, then `--token_min_count` should be increased as well to remove rare tokens. Usually, these rare tokens come from 
   misspelling of users of review sites.
 
+### Aspect and Opinion Extractor with ML models
+
+#### RINANTE
+
+#### SDRN
+
+Todo items:
+
+- [ ] make sure the model setting is consistent with the parameter setting as the paper.
 
 ### Run with Docker
 
