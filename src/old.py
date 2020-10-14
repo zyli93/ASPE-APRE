@@ -19,7 +19,6 @@
     #     for seed in seeds[polarity]:
     #         match_tokens = []
     #         for (l_token, r_token), pmi_value in pmi_matrix.items():
-    #             # TODO: verify the vocab_postags, it is possible that r_token not in vocab_postags
     #             # criteria: (1) r_token in vocab_postags
     #             #           (2) r_token has particular POS tag in "filter_pos"
     #             if l_token == seed and r_token in vocab_postags and \
