@@ -6,10 +6,15 @@ import torch
 import torch.nn as nn
 from relationAttention import RelationAttention
 from crf_new import CRF
-from bert.modeling import BertModel, BERTLayerNorm
 import threading
 import torch.nn.functional as F
 import torch.nn.init as init
+
+# from bert.modeling import BertModel, BERTLayerNorm
+from modeling import BertModel, BERTLayerNorm
+
+# from pytorch_pretrained_bert.modeling import BertModel
+# from pytorch_pretrained_bert.modeling import BertLayerNorm as BERTLayerNorm
 
 
 class opinionMining(nn.Module):

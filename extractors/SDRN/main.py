@@ -2,6 +2,11 @@
 # @Author: Shaowei Chen,     Contact: chenshaowei0507@163.com
 # @Date:   2020-4-26 16:47:32
 
+# Edited by Zeyu Li
+# upgrading bert.modeling or bert.optimization
+# Ref: https://huggingface.co/transformers/main_classes/optimizer_schedules.html
+# Ref: https://huggingface.co/transformers/migration.html 
+
 import time
 import gc
 import torch
@@ -12,10 +17,15 @@ import numpy as np
 import random
 import os
 import argparse
-from bert.modeling import BertConfig
 from torch.utils.data import TensorDataset, DataLoader
 from torch.utils.data.sampler import RandomSampler, SequentialSampler
-from bert.optimization import BERTAdam
+
+# from bert.modeling import BertConfig
+# from bert.optimization import BERTAdam
+
+from pytorch_pretrained_bert.modeling import BertConfig
+from pytorch_pretrained_bert.optimization import BertAdam as BERTAdam
+
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
@@ -299,7 +309,8 @@ def bert_load_state_dict(model, state_dict):
     def load(module, prefix=''):
         local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
         module._load_from_state_dict(
-            state_dict, prefix, True, missing_keys, unexpected_keys, error_msgs)
+            state_dict, prefix, local_metadata,
+            True, missing_keys, unexpected_keys, error_msgs)
         for name, child in module._modules.items():
             if child is not None:
                 load(child, prefix + name + '.')
@@ -385,6 +396,8 @@ def main(args):
         optimizer_grouped_parameters_r = [
             {'params': [p for n, p in param_optimizer if "bert" in n], 'weight_decay': 0.01},
             {'params': [p for n, p in param_optimizer if "relation" in n], 'lr': args.R_lr_rate, 'weight_decay': 0.01}]
+        
+
         optimizer = BERTAdam(optimizer_grouped_parameters,
                              lr=2e-05,
                              warmup=0.1,
@@ -443,8 +456,8 @@ def main(args):
                 right_relation_token += relationRight
                 whole_relation_token += relationWhole
                 # cal loss
-                sample_loss += rloss.data[0] + tloss.data[0]
-                total_loss += rloss.data[0] + tloss.data[0]
+                sample_loss += rloss.data[0] + tloss.data[0]  # commented for version issue, ZL
+                total_loss += rloss.data[0] + tloss.data[0]  # commented for version issue, ZL
                 # print train info
                 if step % 20 == 0:
                     temp_time = time.time()
@@ -522,9 +535,9 @@ if __name__ == '__main__':
     parser.add_argument('--model_dir', type=str, default="./model/2014Lap2")
     parser.add_argument('--eval_dir', type=str, default="./eval/2014Lap2")
     parser.add_argument('--bert_json_dir', type=str,
-                        default="./bert/bert-base-uncased-config.json")
+                        default="./bert_model/bert-base-uncased-config.json")
     parser.add_argument('--bert_checkpoint_dir', type=str,
-                        default="./bert/bert-base-uncased-pytorch_model.bin")
+                        default="./bert_model/bert-base-uncased-pytorch_model.bin")
 
     parser.add_argument('--tagScheme', type=str, default="BIO")
     parser.add_argument('--ifgpu', type=bool, default=True)
@@ -540,7 +553,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr_rate', type=float, default=0.001)
     parser.add_argument('--R_lr_rate', type=float, default=0.001)
     parser.add_argument('--lr_decay', type=float, default=0.98)
-    parser.add_argument('--step', type=int, default=1)
+    parser.add_argument('--step', type=int, default=2)  # ZL: was 1, changed to 2 by paper.
 
     args = parser.parse_args()
     main(args)

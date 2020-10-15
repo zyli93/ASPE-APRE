@@ -15,3 +15,4 @@ torchtext
 spacy
 mosestokenizer
 autocorrect
+pytorch_pretrained_bert

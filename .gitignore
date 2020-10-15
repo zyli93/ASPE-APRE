@@ -152,3 +152,6 @@ extractors/RINANTE/rinante-data.zip
 
 extractors/SDRN/bert/
 extractors/SDRN/data/
+extractors/SDRN/bert_model/
+extractors/SDRN/eval/
+extractors/SDRN/model/

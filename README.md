@@ -167,11 +167,39 @@ awesome         ,JJ  ,0.22824133572268956     ,-0.2510182876984033    ,-0.479259
 
 #### RINANTE
 
+Useful links:
+
+1. Two ways of saving models in TF
+    1. [Article](https://www.easy-tensorflow.com/tf-tutorials/basics/save-and-restore) 1
+    2. [Article](https://cv-tricks.com/tensorflow-tutorial/save-restore-tensorflow-models-quick-complete-tutorial/) 2
+
 #### SDRN
+
+Modifications made to run `SDRN` in the modern world (PyTorch==1.15).
+
+1. Install PyTorch 0.4.1.
+2. Install the package `pytorch_pretrained_bert`. I know it might be outdated by the `SDRN` implementation was actually based on it.
+3. Download Bert checkpoint and config files from [here](https://github.com/ethanjperez/pytorch-pretrained-BERT/blob/master/pytorch_pretrained_bert/modeling.py). Note that the `.bin` (checkpoint) and the `.json` (config) have to match! Add the locations of them to `main.py`.
+4. Make some changes in `main.py` and `opinionMining.py`, all of which is related to `from bert.modeling`.
+5. The `modeling.py` didn't come with the original repo of `SDRN`. Please find it from [here](https://github.com/naver/sqlova/blob/master/bert/modeling.py).
+6. There's was a bug in `_load_from_state_dict` in the repo, but was fixed in this one.
+7. Another problem that I encountered was the `.gamma` and `.beta` of `BertLayerNorm`. Laster fixed it by finding the original `modeling.py`.
+8. Some useful links:
+   1. [Doc](https://pypi.org/project/pytorch-pretrained-bert/) for `pytorch_pretrained_bert`.
+   2. [Doc](https://huggingface.co/transformers/model_doc/bert.html) from hugging face lastest version of BERT.
+   3. [Homepage](https://github.com/huggingface/transformers) of `transformers` of hugging face. Detailed [Doc](https://huggingface.co/transformers/main_classes/optimizer_schedules.html) for Bert optimizations.
+   4. Later version of `modeling.py` [implementation](https://github.com/cedrickchee/pytorch-pretrained-BERT/blob/master/pytorch_pretrained_bert/modeling.py). As you can tell, the attributes of `BertLayerNorm` have been changed to `weight` and `bias` rather than `gamma` and `beta`.
+   5. Source [code](https://huggingface.co/transformers/v2.0.0/_modules/transformers/modeling_bert.html) for hugging face bert. Unfortunately, this time we didn't use the most advanced version of it (:cry:). [Here](https://github.com/naver/sqlova/issues/1) is the GitHub issue about it.
+   6. Of course, the GitHub [homepage](https://github.com/google-research/bert) of Google-research's Bert.
+
 
 Todo items:
 
-- [ ] make sure the model setting is consistent with the parameter setting as the paper.
+- [x] make sure the model setting is consistent with the parameter setting as the paper.
+- [ ] write code to save model
+- [ ] write code to run evaluation
+- [ ] find the best number of iterations
+
 
 ### Run with Docker
 
