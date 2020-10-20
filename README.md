@@ -212,7 +212,7 @@ We managed to run `SDRN`, a Bert-based model for aspect and sentiment co-extract
     |------|---------|---------|---------|
     |#. Ep | 
   
-8. Massage our data into SDRN-compatible format and run inference (annotation). We wrote a Python script to do the work using the preprocessed Amazon data. 
+8. Massage our data into SDRN-compatible format and run inference (annotation). We wrote a Python script to do the work using the preprocessed Amazon data. Note that it takes a long time to run.
     ```bash
     [in_SDRN_dir]$ bash scrips/run_inference.sh
     ```
@@ -226,6 +226,7 @@ We managed to run `SDRN`, a Bert-based model for aspect and sentiment co-extract
     - annotate subset: The Amazon subset to process
     - head: (positive) number of top lines of Amazon data to process; 
             (negative) process the whole dataset.
+9. Parse the output annotation file.
 
 
 #### RINANTE

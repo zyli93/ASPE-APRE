@@ -155,3 +155,4 @@ extractors/SDRN/data/
 extractors/SDRN/bert_model/
 extractors/SDRN/eval/
 extractors/SDRN/model/
+extractors/SDRN/infer_on_ruara*

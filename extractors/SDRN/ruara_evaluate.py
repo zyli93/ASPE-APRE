@@ -212,9 +212,10 @@ def inference(dataloader, inf_set, model, output_file_path, ifgpu=True):
             output_file.write("\n")
 
 if __name__ == '__main__':
-    if len(sys.argv) < 4 + 1:
+    if len(sys.argv) != 4 + 1:
         print("Usage\n\t" + 
               "python {} [do_process] [training data] [annotate subset] [head]".format(sys.argv[0]))
+        sys.exit()
 
     to_process = eval(sys.argv[1])
     training_set = sys.argv[2]  # 2014Lap, 2015Res, 2014Res
@@ -258,5 +259,6 @@ if __name__ == '__main__':
 
     print("running inference!")
     with torch.no_grad():
-        inference(dataloader, instances, model, output_file_dir+"test.out", True)
+        fname = "annotation_{}.txt".format(subset)
+        inference(dataloader, instances, model, output_file_dir+fname, True)
 

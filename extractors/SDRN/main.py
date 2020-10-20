@@ -528,12 +528,12 @@ if __name__ == '__main__':
     parser.add_argument('--data', type=str, default="./data/2014Lap.pt")
 
     ## if test
-    parser.add_argument('--test_model', type=str, default="./model/2014Lap2/modelFinal.model")
-    parser.add_argument('--test_eval_dir', type=str, default="./test_eval/2014Lap2")
+    parser.add_argument('--test_model', type=str, default="./model/2014Lap/modelFinal.model")
+    parser.add_argument('--test_eval_dir', type=str, default="./test_eval/2014Lap")
 
     ## if train
-    parser.add_argument('--model_dir', type=str, default="./model/2014Lap2")
-    parser.add_argument('--eval_dir', type=str, default="./eval/2014Lap2")
+    parser.add_argument('--model_dir', type=str, default="./model/2014Lap")
+    parser.add_argument('--eval_dir', type=str, default="./eval/2014Lap")
     parser.add_argument('--bert_json_dir', type=str,
                         default="./bert_model/bert-base-uncased-config.json")
     parser.add_argument('--bert_checkpoint_dir', type=str,
