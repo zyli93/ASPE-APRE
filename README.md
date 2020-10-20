@@ -165,6 +165,69 @@ awesome         ,JJ  ,0.22824133572268956     ,-0.2510182876984033    ,-0.479259
 
 ### Aspect and Opinion Extractor with ML models
 
+#### SDRN
+
+We managed to run `SDRN`, a Bert-based model for aspect and sentiment co-extraction. We carefully record the procedure for reproduction.
+
+1. Clone the repo from GitHub: https://github.com/NKU-IIPLab/SDRN. Many thanks for sharing the code!
+2. Install PyTorch 0.4.1.
+3. Install the package `pytorch_pretrained_bert`. (I know it might be outdated by the `SDRN` implementation was actually based on it.)
+4. Download Bert checkpoint and config files from [here](https://github.com/ethanjperez/pytorch-pretrained-BERT/blob/master/pytorch_pretrained_bert/modeling.py). Note that the `.bin` (checkpoint) and the `.json` (config) have to match! Add the locations of them to `main.py`.
+5. The `modeling.py` didn't come with the original repo of `SDRN`. Please find it from [here](https://github.com/naver/sqlova/blob/master/bert/modeling.py).
+6. Do some changes following below instructions:
+   1. Make some changes in `main.py` and `opinionMining.py`, all of which is related to `from bert.modeling`.
+      ```python
+      # main.py
+      from bert.modeling import BertConfig
+      from bert.optimization import BERTAdam
+      ```
+      to 
+      ```python
+      # main.py
+      from pytorch_pretrained_bert.modeling import BertConfig
+      from pytorch_pretrained_bert.optimization import BertAdam as BERTAdam
+      ```
+      And
+      ```python
+      # opinionMining.py
+      from bert.modeling import BertModel, BERTLayerNorm
+      ```
+      to 
+      ```python
+      # opinionMinding.py
+      from modeling import BertModel, BERTLayerNorm
+      ```
+      assuming that `modeling.py` has been put to the right position.
+   2. There's was a bug in `_load_from_state_dict` in the repo, can be fixed easily.
+   3. Another problem that I encountered was the `.gamma` and `.beta` of `BertLayerNorm`. Laster fixed it by finding the original `modeling.py`.
+7. Train the model with the given datasets: 2014Lap.pt, 2014Res.pt, 2015Res.pt. Using the folliwing script:
+    ```bash
+    [in_SDRN_dir]$ bash train_sdrn.sh [dataset] [No. of epochs]
+    # e.g.
+    [in_SDRN_dir]$ bash train_sdrn.sh 2014Res 5
+    ```
+    Below are the number of epochs I used to train SDRN.
+
+    |Name  | 2014Lap | 2014Res | 2015Res |
+    |------|---------|---------|---------|
+    |#. Ep | 
+  
+8. Massage our data into SDRN-compatible format and run inference (annotation). We wrote a Python script to do the work using the preprocessed Amazon data. 
+    ```bash
+    [in_SDRN_dir]$ bash scrips/run_inference.sh
+    ```
+    Detailed parameters within `run_inference.sh`.
+    ```bash
+    python ruara_evaluate.py [do_process] [training data] [annotate subset] [head]
+    ```
+    The semantic of parameters:
+    - to_process: True/False, whether to rerun formatting Amazon data to SDRN data
+    - training_set: The dataset that trains the SDRN model
+    - annotate subset: The Amazon subset to process
+    - head: (positive) number of top lines of Amazon data to process; 
+            (negative) process the whole dataset.
+
+
 #### RINANTE
 
 Useful links:
@@ -172,25 +235,6 @@ Useful links:
 1. Two ways of saving models in TF
     1. [Article](https://www.easy-tensorflow.com/tf-tutorials/basics/save-and-restore) 1
     2. [Article](https://cv-tricks.com/tensorflow-tutorial/save-restore-tensorflow-models-quick-complete-tutorial/) 2
-
-#### SDRN
-
-Modifications made to run `SDRN` in the modern world (PyTorch==1.15).
-
-1. Install PyTorch 0.4.1.
-2. Install the package `pytorch_pretrained_bert`. I know it might be outdated by the `SDRN` implementation was actually based on it.
-3. Download Bert checkpoint and config files from [here](https://github.com/ethanjperez/pytorch-pretrained-BERT/blob/master/pytorch_pretrained_bert/modeling.py). Note that the `.bin` (checkpoint) and the `.json` (config) have to match! Add the locations of them to `main.py`.
-4. Make some changes in `main.py` and `opinionMining.py`, all of which is related to `from bert.modeling`.
-5. The `modeling.py` didn't come with the original repo of `SDRN`. Please find it from [here](https://github.com/naver/sqlova/blob/master/bert/modeling.py).
-6. There's was a bug in `_load_from_state_dict` in the repo, but was fixed in this one.
-7. Another problem that I encountered was the `.gamma` and `.beta` of `BertLayerNorm`. Laster fixed it by finding the original `modeling.py`.
-8. Some useful links:
-   1. [Doc](https://pypi.org/project/pytorch-pretrained-bert/) for `pytorch_pretrained_bert`.
-   2. [Doc](https://huggingface.co/transformers/model_doc/bert.html) from hugging face lastest version of BERT.
-   3. [Homepage](https://github.com/huggingface/transformers) of `transformers` of hugging face. Detailed [Doc](https://huggingface.co/transformers/main_classes/optimizer_schedules.html) for Bert optimizations.
-   4. Later version of `modeling.py` [implementation](https://github.com/cedrickchee/pytorch-pretrained-BERT/blob/master/pytorch_pretrained_bert/modeling.py). As you can tell, the attributes of `BertLayerNorm` have been changed to `weight` and `bias` rather than `gamma` and `beta`.
-   5. Source [code](https://huggingface.co/transformers/v2.0.0/_modules/transformers/modeling_bert.html) for hugging face bert. Unfortunately, this time we didn't use the most advanced version of it (:cry:). [Here](https://github.com/naver/sqlova/issues/1) is the GitHub issue about it.
-   6. Of course, the GitHub [homepage](https://github.com/google-research/bert) of Google-research's Bert.
 
 
 Todo items:
@@ -202,4 +246,17 @@ Todo items:
 
 
 ### Run with Docker
+
+## Appendix
+#### SDRN
+
+Modifications made to run `SDRN` in the modern world (PyTorch==1.15).
+
+8. Some useful links:
+   1. [Doc](https://pypi.org/project/pytorch-pretrained-bert/) for `pytorch_pretrained_bert`.
+   2. [Doc](https://huggingface.co/transformers/model_doc/bert.html) from hugging face lastest version of BERT.
+   3. [Homepage](https://github.com/huggingface/transformers) of `transformers` of hugging face. Detailed [Doc](https://huggingface.co/transformers/main_classes/optimizer_schedules.html) for Bert optimizations.
+   4. Later version of `modeling.py` [implementation](https://github.com/cedrickchee/pytorch-pretrained-BERT/blob/master/pytorch_pretrained_bert/modeling.py). As you can tell, the attributes of `BertLayerNorm` have been changed to `weight` and `bias` rather than `gamma` and `beta`.
+   5. Source [code](https://huggingface.co/transformers/v2.0.0/_modules/transformers/modeling_bert.html) for hugging face bert. Unfortunately, this time we didn't use the most advanced version of it (:cry:). [Here](https://github.com/naver/sqlova/issues/1) is the GitHub issue about it.
+   6. Of course, the GitHub [homepage](https://github.com/google-research/bert) of Google-research's Bert.
 
