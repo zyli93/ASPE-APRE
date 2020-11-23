@@ -27,3 +27,21 @@
     #                     (r_token, vocab_postags[r_token], pmi_value))
     #         match_tokens.sort(reverse=True, key=lambda x: x[2])
     #         aspect_opinions[polarity][seed] = match_tokens[:quota]
+
+
+    # def remove_invalid_words(args, word_list):
+    # """Remove invalid words in the word list dataframe.
+    # We used nltk.corpus.words API as it returns a valid English word dictionary.
+
+    # Args:
+    #     word_list - the dataframe of words
+    # """
+    # print("[Annotate] removing invalid words ...", end=" ")
+    # assert isinstance(
+    #     word_list, pd.DataFrame), "word_chart should be a dataframe"
+    # valid_word_list = word_list[word_list["word"].isin(words.words())]
+    # valid_word_list.to_csv(
+    #     args.path + "/valid_cand_senti_pol.csv", index=False)
+    # print("Done!")
+    # print("[Annotate] valid vocab saved at {}/valid_cand_senti_pol.csv".format(args.path))
+    # return valid_word_list

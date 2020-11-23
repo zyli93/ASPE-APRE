@@ -226,7 +226,13 @@ We managed to run `SDRN`, a Bert-based model for aspect and sentiment co-extract
     - annotate subset: The Amazon subset to process
     - head: (positive) number of top lines of Amazon data to process; 
             (negative) process the whole dataset.
-9. Parse the output annotation file.
+9. Parse the output annotation file. Please run the following command
+    ```bash
+    python parse_output.py [training set] [annotate subset]
+    ```
+    The definition of the parameters are the same as point 8. The output will be 
+    1. `./data/anno_[subset]/aspect_terms.pkl`: the aspect terms list pickle.
+    2. `./data/anno_[subset]/sentiment_terms.pkl`: the sentiment terms list pickle.
 
 
 #### RINANTE
@@ -234,8 +240,8 @@ We managed to run `SDRN`, a Bert-based model for aspect and sentiment co-extract
 Useful links:
 
 1. Two ways of saving models in TF
-    1. [Article](https://www.easy-tensorflow.com/tf-tutorials/basics/save-and-restore) 1
-    2. [Article](https://cv-tricks.com/tensorflow-tutorial/save-restore-tensorflow-models-quick-complete-tutorial/) 2
+    1. [Article 1](https://www.easy-tensorflow.com/tf-tutorials/basics/save-and-restore)
+    2. [Article 2](https://cv-tricks.com/tensorflow-tutorial/save-restore-tensorflow-models-quick-complete-tutorial/)
 
 
 Todo items:

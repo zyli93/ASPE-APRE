@@ -7,7 +7,6 @@
 import os
 import sys
 import argparse
-import spacy
 import pandas as pd
 import ujson as json
 import re
@@ -17,9 +16,13 @@ from utils import clean_str2
 from tqdm import tqdm
 from math import log
 
+import spacy
+from spacy.symbols import amod
+
 from nltk import pos_tag_sents
 from nltk.tokenize import sent_tokenize, word_tokenize
 from nltk.corpus import words
+from gensim.models import KeyedVectors
 
 from utils import dump_pkl, load_pkl
 
@@ -185,14 +188,14 @@ def get_vocab_postags(args, df, vocab):
     # text -> sentences -> words
     for text in tqdm(original_text_col):
 
-        # sents is un-lowered and roughly processed (certain punctation removed) 
+        # sents is un-lowered and roughly processed (certain punctation removed)
         #   text for more accurate POS tagging
         # tagged_sents is a list of lists, tokens look like: ("apple", "NN").
         # tagged_tokens flattens the list of lists, lower it before save
         sents = list(map(rough_clean, sent_tokenize(text)))
         tagged_sents = pos_tag_sents(map(word_tokenize, sents))
-        tagged_tokens = [(tag_tuple[0].lower(), tag_tuple[1]) 
-            for sublist in tagged_sents for tag_tuple in sublist]
+        tagged_tokens = [(tag_tuple[0].lower(), tag_tuple[1])
+                         for sublist in tagged_sents for tag_tuple in sublist]
 
         # apply update op on all tagged tokens, use `list()` to make map execute.
         list(map(lambda tpl: update_vocab_counter(vocab_pos, tpl), tagged_tokens))
@@ -211,13 +214,15 @@ def get_vocab_postags(args, df, vocab):
     return vocab_pos_majvote
 
 
-def compute_vocab_polarity_from_seeds(args, seeds, postag_filters, vocab_postags, pmi_matrix):
+def compute_vocab_polarity_from_seeds(
+        args, seeds, postag_filters, vocab_postags, pmi_matrix):
     """ "Grow" (generate) aspect words from seeds for both aspects (pos/neg). 
     Get token polarity based on PMI values.
 
     Current plan: 
         (1) filter the needed POS (given by `postag_filters`)
-        (2) sort only with certain POS.
+        (2) only sort words with certain POS.
+        (3) remove tokens that are not words via nltk.corpus.words.words()
 
     Args:
         args - cmd line input arguments
@@ -228,7 +233,7 @@ def compute_vocab_polarity_from_seeds(args, seeds, postag_filters, vocab_postags
         vocab_postags - the POS tags of vocabulary
         pmi_matrix - the PMI matrix
     Returns:
-
+        cand_df - candidate sementic terms dataframe with all PMI information
     """
     print("[Annotate] computing aspect-sentiment words polarity from seeds ...", end=" ")
     if postag_filters and not isinstance(postag_filters, set):
@@ -237,12 +242,15 @@ def compute_vocab_polarity_from_seeds(args, seeds, postag_filters, vocab_postags
 
     # candidate sentiment word polarity
     cand_senti_pol = []
+    valid_word_vocab = set(words.words())
 
     pos_seeds, neg_seeds = seeds["POS"], seeds["NEG"]
 
     # guaranteed that words in vocab_postags also in pmi_matrix
     for word in tqdm(vocab_postags.keys()):
         if postag_filters and vocab_postags[word] not in postag_filters:
+            continue
+        if word not in valid_word_vocab:
             continue
         pos_pmi = [pmi_matrix.get((pos_seed, word), 0)
                    for pos_seed in pos_seeds]
@@ -270,25 +278,109 @@ def compute_vocab_polarity_from_seeds(args, seeds, postag_filters, vocab_postags
     return cand_df
 
 
-def remove_invalid_words(args, word_list):
-    """Remove invalid words in the word list dataframe.
-    We used nltk.corpus.words API as it returns a valid English word dictionary.
+def filter_senti_terms_by_glove(args, df):
+    """rectify polarity with GloVe
+
+    df - the dataframe for PMI generated terms
+    quota - the num of words to use in each polarity
+    """
+    with open("./configs/glove_seed.json", "r") as fin:
+        glove_seeds = json.load(fin)
+    pos_seeds, neg_seeds = glove_seeds['POS'], glove_seeds['NEG']
+
+    def avg_similarity_to_seeds(target, seeds):
+        return sum([glove.similarity(target, seed) 
+                    for seed in seeds]) / len(seeds)
+    
+    def get_terms_in_polarity(iter_, senti_terms, func):
+        while len(senti_terms) < args.num_senti_terms_per_pol:
+            try:
+                t = next(iter_)
+            except:
+                print("\tStopped early. Unableto get {} terms.".format(
+                    args.num_senti_terms_per_pol))
+                break
+            pos_sim = avg_similarity_to_seeds(t, pos_seeds)
+            neg_sim = avg_similarity_to_seeds(t, neg_seeds)
+            score = 2 * (pos_sim - neg_sim) / (pos_sim + neg_sim)
+            if func(score):
+                senti_terms.append(t)
+
+    # load GloVe vectors
+    glove = glove = KeyedVectors.load_word2vec_format(
+        "./glove/glove.6B.50d.word2vec_format.txt")
+    
+    pos_senti_terms, neg_senti_terms = [], []
+    all_words = list(df['word'])
+
+    head_iter = iter(all_words)
+    bott_iter = iter(all_words[::-1])
+
+    # mine positive tokens
+    get_terms_in_polarity(head_iter, pos_senti_terms, lambda x: x > 0.0)  # positive
+    get_terms_in_polarity(bott_iter, neg_senti_terms, lambda x: x < 0.0)  # negative
+
+    return pos_senti_terms, neg_senti_terms
+
+
+def load_sdrn_sentiment_annotation_terms(args):
+    """load SDRN sentiment annotation terms
+    Args:
+        args.sdrn_anno_path - the path of SDRN annotation text.
+    Return:
+        sdrn_senti_words - [Set] of SDRN annotated sentiment words.
+    """
+    if not os.path.exists(args.sdrn_anno_path):
+        raise FileNotFoundError(
+            "SDRN annotation file NOT found here: {}".format(args.sdrn_anno_path))
+    anno_file = args.sdrn_anno_path
+    sdrn_senti_words = set()
+    with open(anno_file, "r") as fin:
+        for i, line in enumerate(fin.readlines()):
+            if len(line) > 1:
+                token, tag = line.strip().split("\t")
+                if tag in ['B-T', 'I-T']:
+                    sdrn_senti_words.add(token)
+    
+    return sdrn_senti_words
+
+
+def load_senti_wordlist_terms(args):
+    """load Sentiment words from Bing Liu's knowledge base.
+    Returns:
+        senti_wl_terms - [Set] sentiment word list of terms
+    """
+    pos_words_path = "./configs/opinion-lexicon-English/positive-words.txt"
+    neg_words_path = "./configs/opinion-lexicon-English/negative-words.txt"
+    if not os.path.exists(pos_words_path):
+        raise FileNotFoundError("positive-words file not found")
+    if not os.path.exists(neg_words_path):
+        raise FileNotFoundError("negative-words file not found")
+
+    senti_wl_terms = []
+    for wl_path in [pos_words_path, neg_words_path]:
+        with open(wl_path) as fin:
+            terms = fin.readlines()
+            terms = [term.strip() for term in terms if term[0].isalpha()]
+            senti_wl_terms += terms
+    senti_wl_terms = set(senti_wl_terms)
+    return senti_wl_terms
+
+
+def get_sentiment_terms(args):
+    """Mine Sentiment words by PMI, SDRN, SentiWordTable
 
     Args:
-        word_list - the dataframe of words
+        args - the input with multiple arguments
+    Returns:
+        pmi, sdrn terms - if args.use_senti_word_list is False
+        pmi, sdrn, senti_wordlist terms - if args.use_senti_word_list is True
     """
-    print("[Annotate] removing invalid words ...", end=" ")
-    assert isinstance(
-        word_list, pd.DataFrame), "word_chart should be a dataframe"
-    valid_word_list = word_list[word_list["word"].isin(words.words())]
-    valid_word_list.to_csv(
-        args.path + "/valid_cand_senti_pol.csv", index=False)
-    print("Done!")
-    print("[Annotate] valid vocab saved at {}/valid_cand_senti_pol.csv".format(args.path))
-    return valid_word_list
 
+    # ===============================
+    #   Mine Sentiment words by PMI
+    # ===============================
 
-def main(args):
     # check args.path
     if not os.path.exists(args.path):
         raise ValueError("Invalid path {}".format(args.path))
@@ -304,25 +396,94 @@ def main(args):
     pmi_matrix, pmi_vocab = compute_pmi(args, train_df)
     word_to_postag = get_vocab_postags(args, train_df, pmi_vocab)
 
-    # TODO: to be removed later
-    # pmi_matrix = load_pkl(args.path + "/pmi_matrix.dict.pkl")
-    # pmi_vocab = load_pkl(args.path + "/pmi_vocabs.list.pkl")
-    # word_to_postag = load_pkl(args.path + "/postag_of_vocabulary.pkl")
-
     # generate opinion words
-    print(word_to_postag['dial'])
-    print(word_to_postag['lead'])
     word_pol_df = compute_vocab_polarity_from_seeds(
         args,
         seeds=seeds,
         postag_filters=postag_filters['keep'],
         vocab_postags=word_to_postag,
         pmi_matrix=pmi_matrix)
-    remove_invalid_words(args, word_pol_df)
+    
+    # get pmi sentiment word terms
+    pos_senti_terms, neg_senti_terms = filter_senti_terms_by_glove(args, word_pol_df)
+    pmi_senti_terms = pos_senti_terms + neg_senti_terms
 
-    # get polarity here!
-    # maybe add spell check!
-    # quota = args.aspect_candidate_quota_per_seed
+    # ===============================
+    #   Parse SDRN output
+    # ===============================
+    sdrn_senti_terms = load_sdrn_sentiment_annotation_terms(args)
+
+    # if choose not to use sentiment word list, exit here
+    if not args.use_senti_word_list:
+        return pmi_senti_terms, sdrn_senti_terms
+
+    # ===============================
+    #   (Optional) SentiWordTable
+    # ===============================
+
+    senti_wl_terms = load_senti_wordlist_terms(args)
+    return pmi_senti_terms, sdrn_senti_terms, senti_wl_terms
+
+
+def get_aspect_senti_pairs(senti_term_set):
+    """generate (aspect, sentiment) pairs
+    Args:
+        args - the input arguments
+        df - the input data that contains all training reviews
+    Returns:
+        as_pair_set - Aspect-Sentiment pair set
+    
+    Note:
+        In this section, we are using the nlp.pipe api in spaCy to process the strings
+        in batches because of its superior efficiency. Default spaCy pipeline involves 
+        tokenizer, pos tagger, dependency parser, and name entity recognizer. 
+        Therefore, we disable `tagger` and `ner`.
+    
+    TODO: 
+        1. add more processing here to merge certain tokens in dependency parsing tree
+        2. how to deal with processed doc objects in the dataframe?
+    """ 
+    def process(s):
+        """helper func: sentiment tokenizer, dependency parser by batches
+        Arg:
+            s - string of un-sentence-tokenized reviews.
+        Return:
+            generator of Doc objects of processed review 
+        """
+        sentences = sent_tokenize(s)
+        gen = nlp.pipe(sentences, disable=["tagger", "ner"])
+        selected_dep_rel = set([amod])
+        for doc in gen:
+            for tk in doc:
+                if tk.dep in selected_dep_rel and tk.lower_ in senti_term_set:
+                    as_pair_set.add((tk.head, tk.text))
+
+    # load training data
+    train_df = load_train_file(args)
+
+    # processing original text
+    nlp = spacy.load("en")
+    as_pair_set = set()
+    train_df['review_doc_generator'] = train_df.original_text.apply(process)
+
+    return as_pair_set
+
+
+def main(args):
+    print("[Annotate] getting sentiment terms ...")
+    term_sets = get_sentiment_terms(args)
+
+    print("[Annotate] unioning {} sets ...".format(len(term_sets)))
+    term_set = set.union(*term_sets)  # merge all term sets, 2 or 3
+
+    print("[Annotate] getting aspect sentiment pairs ...")
+    as_pairs = get_aspect_senti_pairs(term_set)
+
+    # save things
+    print("[Annotate] saving extracted aspect sentiment paris ...")
+    dump_pkl(path=args.path + "/as_pairs.pkl", obj=as_pairs)
+    
+
 
 
 if __name__ == "__main__":
@@ -332,7 +493,13 @@ if __name__ == "__main__":
         "--path",
         type=str,
         required=True,
-        help="Path to the dataset goodreads")
+        help="Path to the dataset.")
+
+    parser.add_argument(
+        "--sdrn_anno_path",
+        type=str,
+        required=True,
+        help="Path to SDRN annotation results")
 
     parser.add_argument(
         "--pmi_window_size",
@@ -347,10 +514,15 @@ if __name__ == "__main__":
         help="Minimum token occurences in corpus. Rare tokens are discarded. Default=20.")
 
     parser.add_argument(
-        "--aspect_candidate_quota_per_seed",
+        "--num_senti_terms_per_pol",
         type=int,
-        default=100,
-        help="Number of candidate aspect opinion word to extract per seed. Default=3.")
+        default=200,
+        help="Number of sentiment terms per seed. Default=200.")
+    
+    parser.add_argument(
+        "--use_senti_word_list",
+        action="store_true",
+        help="If used, sentiment word table will be used as well.")
 
     args = parser.parse_args()
     main(args)

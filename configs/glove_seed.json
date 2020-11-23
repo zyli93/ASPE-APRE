@@ -1,0 +1,9 @@
+{
+    "POS":[
+        "good", "better", "great", 
+        "perfect", "excellent", "splendid", "positive"],
+    "NEG":[
+        "bad", "worse", "terrible", 
+        "wrong", "unsatisfied", "negative", 
+        "troublesome","painful"]
+}

@@ -46,7 +46,7 @@ def dump_pkl(path, obj):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 1 + 1:
+    if len(sys.argv) != 2 + 1:
         print("Usage\n\tpython {} [training_set] [subset]".format(sys.argv[0]))
         sys.exit()
     
@@ -56,7 +56,7 @@ if __name__ == "__main__":
     data = load_output_annotation_file(train_set, subset)
     aspect_set, sentiment_set = parse_annotation(data)
 
-    annotation_dir = "./data/anno_{}/"
+    annotation_dir = "./data/anno_{}/".format(subset)
     os.makedirs(annotation_dir, exist_ok=True)
     dump_pkl(annotation_dir + "aspect_terms.pkl", aspect_set)
     dump_pkl(annotation_dir + "sentiment_terms.pkl", sentiment_set)
