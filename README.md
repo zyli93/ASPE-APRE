@@ -16,7 +16,8 @@ Rating prediction with Unsupervised Aspect-level Review Analysis (RUARA)
 - [x] add discussion about window size
 - [x] add example of result of PMI annotation
 - [x] add notes for deleting RB and using JJ only
-- [ ] add gensim with glove embedding
+- [x] add gensim with glove embedding
+- [ ] use higher dimension of glove
 
 ## Data
 
@@ -34,6 +35,18 @@ We used the 5-core version. The downloaded files are in the `.json.gz` extension
 
 #### Yelp
 We used the plain version of Yelp dataset and generate its 5-core
+
+
+### GloVe
+GloVe is a pre-trained embedding vector popularly used for a wide range of NLP tasks.
+We use GloVe as the second filter of PMI sentiment term extraction.
+GloVe can be downloaded from [here](https://nlp.stanford.edu/projects/glove/). 
+And after downloading, please place it in `./glove` and then run 
+```bash
+python src/reformat_glove.py
+```
+
+
 
 
 ## Run Ruara

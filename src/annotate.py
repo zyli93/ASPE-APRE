@@ -441,7 +441,7 @@ def get_aspect_senti_pairs(senti_term_set):
     
     TODO: 
         1. add more processing here to merge certain tokens in dependency parsing tree
-        2. how to deal with processed doc objects in the dataframe?
+        2. how to deal with processed doc objects?
     """ 
     def process(s):
         """helper func: sentiment tokenizer, dependency parser by batches
@@ -464,7 +464,7 @@ def get_aspect_senti_pairs(senti_term_set):
     # processing original text
     nlp = spacy.load("en")
     as_pair_set = set()
-    train_df['review_doc_generator'] = train_df.original_text.apply(process)
+    train_df['review_doc_generator'] = train_df.original_text.progress_apply(process)
 
     return as_pair_set
 
@@ -475,6 +475,8 @@ def main(args):
 
     print("[Annotate] unioning {} sets ...".format(len(term_sets)))
     term_set = set.union(*term_sets)  # merge all term sets, 2 or 3
+
+    dump_pkl("term_set.pkl", term_set)
 
     print("[Annotate] getting aspect sentiment pairs ...")
     as_pairs = get_aspect_senti_pairs(term_set)
@@ -516,8 +518,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num_senti_terms_per_pol",
         type=int,
-        default=200,
-        help="Number of sentiment terms per seed. Default=200.")
+        default=300,
+        help="Number of sentiment terms per seed. Default=300.")
     
     parser.add_argument(
         "--use_senti_word_list",
