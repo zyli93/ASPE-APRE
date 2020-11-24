@@ -159,3 +159,6 @@ extractors/SDRN/infer_on_ruara*
 
 # folder of glove
 glove/
+
+# temporary directory
+temp/

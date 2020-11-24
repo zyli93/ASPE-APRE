@@ -27,19 +27,19 @@ from gensim.models import KeyedVectors
 from utils import dump_pkl, load_pkl
 
 
-def load_train_file(args):
+def load_train_file(path):
     """load train data file"""
-    print("[Annotate] loading training df ...", end=" ")
-    in_file = args.path + "/train_data.csv"
+    print("\t[Annotate] loading training df ...", end=" ")
+    in_file = path + "/train_data.csv"
     df = pd.read_csv(in_file)
     print("Done!")
     return df
 
 
-def load_seed_words():
+def load_pmi_seed_words():
     """load seed works for auto aspect detection"""
-    print("[Annotate] loading seed words ...", end=" ")
-    seed_words_file = "./configs/seed_words.json"
+    print("\t[Annotate] loading seed words ...", end=" ")
+    seed_words_file = "./configs/pmi_seed_words.json"
     if not os.path.exists(seed_words_file):
         raise FileNotFoundError(
             "Seed words doesn't exist! Please refer to README for details.")
@@ -58,7 +58,7 @@ def load_postag_filters(args):
     pos_json = "./configs/fine_grained.pos.json"
     with open(pos_json, "r") as fin:
         pos_filters = json.load(fin)
-    print("[Annotate] using {}-grained POS tags".format(grain))
+    print("\t[Annotate] using {}-grained POS tags".format(grain))
     return pos_filters
 
 
@@ -75,7 +75,7 @@ def compute_pmi(args, df):
     """
     if not hasattr(args, "pmi_window_size"):
         raise AttributeError("--pmi_window_size has to be specified!")
-    print("[Annotate] compute P(i) and P(i,j) ...", end=" ")
+    print("\t[Annotate] compute P(i) and P(i,j) ...", end=" ")
 
     # initialize counters
     ws = args.pmi_window_size
@@ -98,7 +98,7 @@ def compute_pmi(args, df):
     print("Done!")
 
     # build p_i and p_ij and divide them by total_window_counter
-    print("[Annotate] compute PMI ...", end=" ")
+    print("\t[Annotate] compute PMI ...", end=" ")
 
     # delete rare tokens as they usually contain misspellings
     for word in list(single_counter.keys()):
@@ -126,16 +126,16 @@ def compute_pmi(args, df):
     dump_pkl(args.path + "/pmi_vocabs.list.pkl", pmi_vocabs)
 
     print("Done!")
-    print("[Annotate] PMI matrix and vocabulary saved in {}".format(args.path))
+    print("\t[Annotate] PMI matrix and vocabulary saved in {}".format(args.path))
 
     # TODO: to delete dump_pkl later after verification
-    dump_pkl("pmi.pkl", pmi)  # TODO: how to verify this is correct?
+    dump_pkl("./temp/pmi.pkl", pmi)  # TODO: how to verify this is correct?
 
-    dump_pkl("pij.pkl", p_ij)
-    dump_pkl("pi.pkl", p_i)
+    dump_pkl("./temp/pij.pkl", p_ij)
+    dump_pkl("./temp/pi.pkl", p_i)
 
-    dump_pkl("single_counter.pkl", single_counter)
-    dump_pkl("pair_counter.pkl", pair_counter)
+    dump_pkl("./temp/single_counter.pkl", single_counter)
+    dump_pkl("./temp/pair_counter.pkl", pair_counter)
 
     return pmi, pmi_vocabs
 
@@ -177,7 +177,7 @@ def get_vocab_postags(args, df, vocab):
         s = re.sub(r"\\", " ", s)
         return s
 
-    print("[Annotate] processing vocabulary part-of-speech ...", end=" ")
+    print("\t[Annotate] processing vocabulary part-of-speech ...", end=" ")
 
     vocab_pos = {word: Counter() for word in vocab}
     vocab = set(vocab)
@@ -201,7 +201,7 @@ def get_vocab_postags(args, df, vocab):
         list(map(lambda tpl: update_vocab_counter(vocab_pos, tpl), tagged_tokens))
     print("Done!")
 
-    print("[Annotate] majority voting for pos-tagging ...", end=" ")
+    print("\t[Annotate] majority voting for pos-tagging ...", end=" ")
     vocab_pos_majvote = {}
     for word in vocab_pos:
         if len(vocab_pos[word]):
@@ -210,7 +210,7 @@ def get_vocab_postags(args, df, vocab):
     dump_pkl(args.path + "/postag_of_vocabulary_full.pkl", vocab_pos)
     dump_pkl(args.path + "/postag_of_vocabulary.pkl", vocab_pos_majvote)
     print("Done!")
-    print("[Annotate] results saved at {}/postag_of_vocabulary.pkl".format(args.path))
+    print("\t[Annotate] results saved at {}/postag_of_vocabulary.pkl".format(args.path))
     return vocab_pos_majvote
 
 
@@ -235,7 +235,7 @@ def compute_vocab_polarity_from_seeds(
     Returns:
         cand_df - candidate sementic terms dataframe with all PMI information
     """
-    print("[Annotate] computing aspect-sentiment words polarity from seeds ...", end=" ")
+    print("\t[Annotate] computing aspect-sentiment words polarity from seeds ...", end=" ")
     if postag_filters and not isinstance(postag_filters, set):
         # postag_filters contains the POS tags to keep
         postag_filters = set(postag_filters)
@@ -273,7 +273,7 @@ def compute_vocab_polarity_from_seeds(
     cand_df.to_csv(args.path + "/cand_senti_pol.csv", index=False)
 
     print("Done!")
-    print("[Annotate] vocab polarity saved at {}/cand_senti_pol.csv".format(args.path))
+    print("\t[Annotate] vocab polarity saved at {}/cand_senti_pol.csv".format(args.path))
 
     return cand_df
 
@@ -297,7 +297,7 @@ def filter_senti_terms_by_glove(args, df):
             try:
                 t = next(iter_)
             except:
-                print("\tStopped early. Unableto get {} terms.".format(
+                print("\tStopped early. Unable to get {} terms.".format(
                     args.num_senti_terms_per_pol))
                 break
             pos_sim = avg_similarity_to_seeds(t, pos_seeds)
@@ -307,8 +307,9 @@ def filter_senti_terms_by_glove(args, df):
                 senti_terms.append(t)
 
     # load GloVe vectors
+    print("\t[Annotate] loading GloVe {}-d".format(args.glove_dimension))
     glove = glove = KeyedVectors.load_word2vec_format(
-        "./glove/glove.6B.50d.word2vec_format.txt")
+        "./glove/glove.6B.{}d.word2vec_format.txt".format(args.glove_dimension))
     
     pos_senti_terms, neg_senti_terms = [], []
     all_words = list(df['word'])
@@ -317,6 +318,7 @@ def filter_senti_terms_by_glove(args, df):
     bott_iter = iter(all_words[::-1])
 
     # mine positive tokens
+    print("\t[Annotate] getting terms in positive & negative polarity ...")
     get_terms_in_polarity(head_iter, pos_senti_terms, lambda x: x > 0.0)  # positive
     get_terms_in_polarity(bott_iter, neg_senti_terms, lambda x: x < 0.0)  # negative
 
@@ -388,8 +390,8 @@ def get_sentiment_terms(args):
         args.path = args.path[:-1]
 
     # load config files
-    seeds = load_seed_words()
-    train_df = load_train_file(args)
+    pmi_seeds = load_pmi_seed_words()
+    train_df = load_train_file(path=args.path)
     postag_filters = load_postag_filters(args)
 
     # compute PMI and POS tag
@@ -399,14 +401,14 @@ def get_sentiment_terms(args):
     # generate opinion words
     word_pol_df = compute_vocab_polarity_from_seeds(
         args,
-        seeds=seeds,
+        seeds=pmi_seeds,
         postag_filters=postag_filters['keep'],
         vocab_postags=word_to_postag,
         pmi_matrix=pmi_matrix)
     
     # get pmi sentiment word terms
     pos_senti_terms, neg_senti_terms = filter_senti_terms_by_glove(args, word_pol_df)
-    pmi_senti_terms = pos_senti_terms + neg_senti_terms
+    pmi_senti_terms = set(pos_senti_terms).union(set(neg_senti_terms))
 
     # ===============================
     #   Parse SDRN output
@@ -425,19 +427,23 @@ def get_sentiment_terms(args):
     return pmi_senti_terms, sdrn_senti_terms, senti_wl_terms
 
 
-def get_aspect_senti_pairs(senti_term_set):
+def get_aspect_senti_pairs(args, senti_term_set):
     """generate (aspect, sentiment) pairs
     Args:
         args - the input arguments
-        df - the input data that contains all training reviews
+        senti_term_set - the set of sentiment terms to use
     Returns:
         as_pair_set - Aspect-Sentiment pair set
     
     Note:
-        In this section, we are using the nlp.pipe api in spaCy to process the strings
+    1.  In this section, we are using the nlp.pipe api in spaCy to process the strings
         in batches because of its superior efficiency. Default spaCy pipeline involves 
         tokenizer, pos tagger, dependency parser, and name entity recognizer. 
         Therefore, we disable `tagger` and `ner`.
+    2.  In this function, we use `to_pickle` to save dataframe as pickle since the parsed
+        Doc list will be used later. We don't want to waste that time again. Just in case
+        Pickle wouldn't be able to handle the size, we can always switch to HDF5 by using
+        `to_hdf()`.
     
     TODO: 
         1. add more processing here to merge certain tokens in dependency parsing tree
@@ -451,41 +457,52 @@ def get_aspect_senti_pairs(senti_term_set):
             generator of Doc objects of processed review 
         """
         sentences = sent_tokenize(s)
-        gen = nlp.pipe(sentences, disable=["tagger", "ner"])
-        selected_dep_rel = set([amod])
-        for doc in gen:
+        # gen = nlp.pipe(sentences, disable=["tagger", "ner"])
+        doc_list = [_ for _ in nlp.pipe(sentences, disable=['tagger', 'ner'])]
+        selected_dep_rel = set([amod]) 
+        # TODO: additional dependency parsing goes here
+        for doc in doc_list:
             for tk in doc:
                 if tk.dep in selected_dep_rel and tk.lower_ in senti_term_set:
                     as_pair_set.add((tk.head, tk.text))
 
     # load training data
-    train_df = load_train_file(args)
+    train_df = load_train_file(path=args.path)
 
     # processing original text
-    nlp = spacy.load("en")
-    as_pair_set = set()
-    train_df['review_doc_generator'] = train_df.original_text.progress_apply(process)
+    nlp = spacy.load("en_core_web_sm")
+    as_pair_set = set()  # will be modified in the `progress_apply`.
+    tqdm.pandas()  # use tqdm pandas to enable progress bar for `progress_apply`.
+    train_df['dep_parsed_review_Doc_list'] = train_df.original_text.progress_apply(process)
+
+    # save the processed train_df for later use.
+    train_df.to_pickle(args.path + "train_data_dep.pkl")
 
     return as_pair_set
 
 
 def main(args):
     print("[Annotate] getting sentiment terms ...")
-    term_sets = get_sentiment_terms(args)
+    # term_sets = get_sentiment_terms(args)
 
+    # dump_pkl("temp/term_set.pkl", term_sets)
+
+    term_sets = load_pkl("temp/term_set.pkl")
+    term_sets = list(term_sets)
+    term_sets[0] = set(term_sets[0])
+    print(type(term_sets))
+    print(len(term_sets))
+    print([type(x) for x in term_sets])
     print("[Annotate] unioning {} sets ...".format(len(term_sets)))
+
     term_set = set.union(*term_sets)  # merge all term sets, 2 or 3
 
-    dump_pkl("term_set.pkl", term_set)
-
     print("[Annotate] getting aspect sentiment pairs ...")
-    as_pairs = get_aspect_senti_pairs(term_set)
+    as_pairs = get_aspect_senti_pairs(args, term_set)
 
     # save things
     print("[Annotate] saving extracted aspect sentiment paris ...")
     dump_pkl(path=args.path + "/as_pairs.pkl", obj=as_pairs)
-    
-
 
 
 if __name__ == "__main__":
@@ -525,6 +542,12 @@ if __name__ == "__main__":
         "--use_senti_word_list",
         action="store_true",
         help="If used, sentiment word table will be used as well.")
+
+    parser.add_argument(
+        "--glove_dimension",
+        type=int,
+        default=100,
+        help="The dimension of glove to use in the PMI parsing. Default=100.")
 
     args = parser.parse_args()
     main(args)

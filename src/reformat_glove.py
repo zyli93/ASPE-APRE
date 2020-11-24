@@ -3,7 +3,7 @@ import os
 from gensim.test.utils import datapath, get_tmpfile
 from gensim.scripts.glove2word2vec import glove2word2vec
 
-if len(sys.argv) < 1 + 1:
+if len(sys.argv) != 1 + 1:
     print("[Usage]:\n\tpython {} [dim]".format(sys.argv[0]))
     sys.exit()
 
