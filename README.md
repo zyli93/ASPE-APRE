@@ -19,14 +19,17 @@ Rating prediction with Unsupervised Aspect-level Review Analysis (RUARA)
 - [x] add gensim with glove embedding
 - [ ] use higher dimension of glove
 
-## Data
+## Data and External Resources
 
 We use the following datasets: Amazon, Yelp, and Goodread.
+Two external resources are also required: GloVe pretrained word vectors and BERT pretrained parameters.
 
 ### Where to find them?
 
 * Amazon datasets can be found [here](https://nijianmo.github.io/amazon/index.html). Many thanks to the managing team!
 * Yelp dataset can be found [here](https://www.yelp.com/dataset). Many thanks to Yelp for sharing the invaluable database!
+* GloVe: See [GloVe](###GloVe) for details.
+* BERT: See [BERT's GitHub](https://github.com/google-research/bert) to download BERT pretrained parameters, configurations, and vocabulary.
 
 ### Unzip and rename.
 
@@ -265,6 +268,20 @@ Todo items:
 - [ ] find the best number of iterations
 
 
+### Dependency Parsing
+
+```text
+23.95% :::::::::                                |     3331 /    13909 |
+25.01% ::::::::::                               |     3479 /    13909 |
+23.51% :::::::::                                |     3270 /    13909 |
+75.50% ::::::::::::::::::::::::::::::           |    10501 /    13909 |
+23.71% :::::::::                                |     3298 /    13909 |
+24.85% :::::::::                                |     3456 /    13908 |
+23.22% :::::::::                                |     3229 /    13908 |
+25.44% ::::::::::                               |     3538 /    13908 |
+```
+
+
 ### Run with Docker
 
 ## Appendix
@@ -277,6 +294,6 @@ Modifications made to run `SDRN` in the modern world (PyTorch==1.15).
    2. [Doc](https://huggingface.co/transformers/model_doc/bert.html) from hugging face lastest version of BERT.
    3. [Homepage](https://github.com/huggingface/transformers) of `transformers` of hugging face. Detailed [Doc](https://huggingface.co/transformers/main_classes/optimizer_schedules.html) for Bert optimizations.
    4. Later version of `modeling.py` [implementation](https://github.com/cedrickchee/pytorch-pretrained-BERT/blob/master/pytorch_pretrained_bert/modeling.py). As you can tell, the attributes of `BertLayerNorm` have been changed to `weight` and `bias` rather than `gamma` and `beta`.
-   5. Source [code](https://huggingface.co/transformers/v2.0.0/_modules/transformers/modeling_bert.html) for hugging face bert. Unfortunately, this time we didn't use the most advanced version of it (:cry:). [Here](https://github.com/naver/sqlova/issues/1) is the GitHub issue about it.
+   5. Source [code](https://huggingface.co/transformers/v2.0.0/_modules/transformers/modeling_bert.html) for hugging face bert. Unfortunately, this time we didn't use the most advanced version of it :cry:. [Here](https://github.com/naver/sqlova/issues/1) is the GitHub issue about it.
    6. Of course, the GitHub [homepage](https://github.com/google-research/bert) of Google-research's Bert.
 

@@ -7,24 +7,25 @@
 import os
 import sys
 import argparse
-import pandas as pd
 import ujson as json
 import re
 from collections import Counter
 from itertools import permutations
-from utils import clean_str2
 from tqdm import tqdm
 from math import log
 
+import pandas as pd
+from pandarallel import pandarallel
+
 import spacy
 from spacy.symbols import amod
-
 from nltk import pos_tag_sents
 from nltk.tokenize import sent_tokenize, word_tokenize
 from nltk.corpus import words
 from gensim.models import KeyedVectors
 
 from utils import dump_pkl, load_pkl
+from utils import clean_str2
 
 
 def load_train_file(path):
@@ -37,7 +38,7 @@ def load_train_file(path):
 
 
 def load_pmi_seed_words():
-    """load seed works for auto aspect detection"""
+    """load seed words for auto aspect detection"""
     print("\t[Annotate] loading seed words ...", end=" ")
     seed_words_file = "./configs/pmi_seed_words.json"
     if not os.path.exists(seed_words_file):
@@ -307,9 +308,10 @@ def filter_senti_terms_by_glove(args, df):
                 senti_terms.append(t)
 
     # load GloVe vectors
-    print("\t[Annotate] loading GloVe {}-d".format(args.glove_dimension))
+    print("\t[Annotate] loading GloVe {}-d".format(args.glove_dimension), end=" ")
     glove = glove = KeyedVectors.load_word2vec_format(
         "./glove/glove.6B.{}d.word2vec_format.txt".format(args.glove_dimension))
+    print("Done!")
     
     pos_senti_terms, neg_senti_terms = [], []
     all_words = list(df['word'])
@@ -327,6 +329,7 @@ def filter_senti_terms_by_glove(args, df):
 
 def load_sdrn_sentiment_annotation_terms(args):
     """load SDRN sentiment annotation terms
+
     Args:
         args.sdrn_anno_path - the path of SDRN annotation text.
     Return:
@@ -341,7 +344,7 @@ def load_sdrn_sentiment_annotation_terms(args):
         for i, line in enumerate(fin.readlines()):
             if len(line) > 1:
                 token, tag = line.strip().split("\t")
-                if tag in ['B-T', 'I-T']:
+                if tag in ['B-P', 'I-P']:
                     sdrn_senti_words.add(token)
     
     return sdrn_senti_words
@@ -349,6 +352,7 @@ def load_sdrn_sentiment_annotation_terms(args):
 
 def load_senti_wordlist_terms(args):
     """load Sentiment words from Bing Liu's knowledge base.
+
     Returns:
         senti_wl_terms - [Set] sentiment word list of terms
     """
@@ -464,7 +468,9 @@ def get_aspect_senti_pairs(args, senti_term_set):
         for doc in doc_list:
             for tk in doc:
                 if tk.dep in selected_dep_rel and tk.lower_ in senti_term_set:
-                    as_pair_set.add((tk.head, tk.text))
+                    # tk.head [spacy Token], tk.head.text [str]
+                    as_pair_set.add((tk.head.text, tk.text))
+        return doc_list
 
     # load training data
     train_df = load_train_file(path=args.path)
@@ -472,37 +478,59 @@ def get_aspect_senti_pairs(args, senti_term_set):
     # processing original text
     nlp = spacy.load("en_core_web_sm")
     as_pair_set = set()  # will be modified in the `progress_apply`.
-    tqdm.pandas()  # use tqdm pandas to enable progress bar for `progress_apply`.
-    train_df['dep_parsed_review_Doc_list'] = train_df.original_text.progress_apply(process)
+    if not args.multi_proc_dep_parsing:
+        tqdm.pandas()  # use tqdm pandas to enable progress bar for `progress_apply`.
+        train_df['dep_review_Doc_list'] = train_df.original_text.progress_apply(process)
+    else:
+        print("\t[Annotate] Using parallel dep parsing." + 
+              "Spinning off {} parallel workers ...".format(args.num_workers_mp_dep))
+        pandarallel.initialize(
+            nb_workers=args.num_workers_mp_dep,
+            progress_bar=True,
+            verbose=1)
+        train_df['dep_review_Doc_list'] = train_df.original_text.parallel_apply(process)
 
     # save the processed train_df for later use.
-    train_df.to_pickle(args.path + "train_data_dep.pkl")
+    train_df.to_pickle(args.path + "/train_data_dep.pkl")
 
     return as_pair_set
 
 
 def main(args):
     print("[Annotate] getting sentiment terms ...")
-    # term_sets = get_sentiment_terms(args)
+    # term_sets = get_sentiment_terms(args)  # uncomment afterward
+
+    # ==== temp code blow =====
 
     # dump_pkl("temp/term_set.pkl", term_sets)
 
     term_sets = load_pkl("temp/term_set.pkl")
     term_sets = list(term_sets)
     term_sets[0] = set(term_sets[0])
+    
+    sdrn_set = load_sdrn_sentiment_annotation_terms(args)
+    term_sets[1] = sdrn_set
+
     print(type(term_sets))
     print(len(term_sets))
     print([type(x) for x in term_sets])
     print("[Annotate] unioning {} sets ...".format(len(term_sets)))
 
     term_set = set.union(*term_sets)  # merge all term sets, 2 or 3
+    dump_pkl("temp/term_set.pkl", term_set)
+
+    # ===== temp code above ====
 
     print("[Annotate] getting aspect sentiment pairs ...")
-    as_pairs = get_aspect_senti_pairs(args, term_set)
+    # as_pairs = get_aspect_senti_pairs(args, term_set)
 
     # save things
     print("[Annotate] saving extracted aspect sentiment paris ...")
-    dump_pkl(path=args.path + "/as_pairs.pkl", obj=as_pairs)
+    # dump_pkl(path=args.path + "/as_pairs.pkl", obj=as_pairs)
+
+    # write as pairs to file
+    print("[Annotate] output aspects to temp folder ...")
+    # for 
 
 
 if __name__ == "__main__":
@@ -548,6 +576,18 @@ if __name__ == "__main__":
         type=int,
         default=100,
         help="The dimension of glove to use in the PMI parsing. Default=100.")
+    
+    parser.add_argument(
+        "--multi_proc_dep_parsing",
+        action="store_true",
+        default=False,
+        help="If used, parallel processing of dependency parsing will be enabled.")
+    
+    parser.add_argument(
+        "--num_workers_mp_dep",
+        type=int,
+        default=8,
+        help="Number of workers to be spinned off for multiproc dep parsing.")
 
     args = parser.parse_args()
     main(args)

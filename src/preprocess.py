@@ -140,7 +140,7 @@ def parse_yelp(args):
                 continue
             
             # filter out extremely short reviews
-            if len(data['text']) < args.min_review_len:
+            if len(data['text'].strip().split(" ")) < args.min_review_len:
                 continue
 
             if bid not in bid2idx:
@@ -260,7 +260,7 @@ def parse_amazon(args):
             processed_text = process_text(
                 data['reviewText'], do_spell_check=args.use_spell_check)
             # processed_text = data['reviewText']
-            if len(processed_text) < args.min_review_len:
+            if len(processed_text.strip().split(" ")) < args.min_review_len:
                 continue
 
             # change string `asin` and `reviewerID` to `iid` and `uid`
@@ -451,8 +451,8 @@ if __name__ == '__main__':
     parser.add_argument(
         "--test_split_ratio",
         type=float,
-        default=0.05,
-        help="Ratio of test split to main dataset. Default=0.05.")
+        default=0.1,
+        help="Ratio of test split to main dataset. Default=0.1.")
 
     parser.add_argument(
         "--k_core",
@@ -463,8 +463,8 @@ if __name__ == '__main__':
     parser.add_argument(
         "--min_review_len",
         type=int,
-        default=20,
-        help="Minimum length of the reviews. Default=20.")
+        default=5,
+        help="Minimum num of words of the reviews. Default=5.")
 
     parser.add_argument(
         "--use_spell_check",
