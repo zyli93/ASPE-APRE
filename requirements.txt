@@ -12,7 +12,7 @@ nltk
 lxml
 bs4
 torchtext
-spacy
+spacy==2.3.2
 mosestokenizer
 autocorrect
 pytorch_pretrained_bert

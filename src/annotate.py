@@ -448,11 +448,8 @@ def get_aspect_senti_pairs(args, senti_term_set):
         Doc list will be used later. We don't want to waste that time again. Just in case
         Pickle wouldn't be able to handle the size, we can always switch to HDF5 by using
         `to_hdf()`.
-    
-    TODO: 
-        1. add more processing here to merge certain tokens in dependency parsing tree
-        2. how to deal with processed doc objects?
     """ 
+
     def process(s):
         """helper func: sentiment tokenizer, dependency parser by batches
         Arg:
@@ -464,13 +461,20 @@ def get_aspect_senti_pairs(args, senti_term_set):
         # gen = nlp.pipe(sentences, disable=["tagger", "ner"])
         doc_list = [_ for _ in nlp.pipe(sentences, disable=['tagger', 'ner'])]
         selected_dep_rel = set([amod]) 
-        # TODO: additional dependency parsing goes here
         for doc in doc_list:
             for tk in doc:
                 if tk.dep in selected_dep_rel and tk.lower_ in senti_term_set:
                     # tk.head [spacy Token], tk.head.text [str]
                     as_pair_set.add((tk.head.text, tk.text))
         return doc_list
+    
+    def process_complex(s):
+        """helper func. Same as `process` but implements more complex extraction method
+        for aspect and sentiments"""
+        sentences = sent_tokenize(s)
+        doc_list = [_ for _ in nlp.pipe(sentences, disable=['tagger', 'ner'])]
+        # TODO: finish here!
+
 
     # load training data
     train_df = load_train_file(path=args.path)
