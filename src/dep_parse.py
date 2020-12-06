@@ -2,7 +2,7 @@ import spacy
 from spacy.symbols import amod, nsubj, acomp, attr
 from spacy import displacy
 BE_VERB = set(["was", "is", "were", "are", "\'re", "\'s"])
-def extract_aspair_depg_spacy(doc):
+def extract_aspair_deptree_spacy(doc):
     """Extract Aspect-Sentiment pairs from [spaCy] style dependency graph.
 
 

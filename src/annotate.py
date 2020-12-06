@@ -26,7 +26,10 @@ from gensim.models import KeyedVectors
 
 from utils import dump_pkl, load_pkl
 from utils import clean_str2
+from dep_parse import extract_aspair_deptree_spacy
 
+COL_DEP_DOC = "dep_review_Doc_list"
+COL_AS_PAIRS = "review_as_pairs"
 
 def load_train_file(path):
     """load train data file"""
@@ -470,10 +473,15 @@ def get_aspect_senti_pairs(args, senti_term_set):
     
     def process_complex(s):
         """helper func. Same as `process` but implements more complex extraction method
-        for aspect and sentiments"""
+        for aspect and sentiments. Only difference is returning additional `aspairs`."""
         sentences = sent_tokenize(s)
         doc_list = [_ for _ in nlp.pipe(sentences, disable=['tagger', 'ner'])]
         # TODO: finish here!
+        for doc in doc_list:
+            aspairs = extract_aspair_deptree_spacy(doc)
+            as_pair_set.update(aspairs)
+        
+        return doc_list, aspairs
 
 
     # load training data
@@ -481,10 +489,12 @@ def get_aspect_senti_pairs(args, senti_term_set):
 
     # processing original text
     nlp = spacy.load("en_core_web_sm")
-    as_pair_set = set()  # will be modified in the `progress_apply`.
+    as_pair_set = set()
+
+    # changing process to process_complex, returning two 
     if not args.multi_proc_dep_parsing:
         tqdm.pandas()  # use tqdm pandas to enable progress bar for `progress_apply`.
-        train_df['dep_review_Doc_list'] = train_df.original_text.progress_apply(process)
+        train_df[COL_DEP_DOC] = train_df.original_text.progress_apply(process)
     else:
         print("\t[Annotate] Using parallel dep parsing." + 
               "Spinning off {} parallel workers ...".format(args.num_workers_mp_dep))
@@ -492,7 +502,7 @@ def get_aspect_senti_pairs(args, senti_term_set):
             nb_workers=args.num_workers_mp_dep,
             progress_bar=True,
             verbose=1)
-        train_df['dep_review_Doc_list'] = train_df.original_text.parallel_apply(process)
+        train_df[[COL_DEP_DOC, COL_AS_PAIRS] = train_df.original_text.parallel_apply(process)
 
     # save the processed train_df for later use.
     train_df.to_pickle(args.path + "/train_data_dep.pkl")

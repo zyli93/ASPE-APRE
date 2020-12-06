@@ -1,10 +1,10 @@
 '''
-    Extracting the terms in the document
+    The file for dataloader.
 
-    File name: extract.py
+    File name: dataloader.py
     Author: Zeyu Li 
     Email: <zyli@cs.ucla.edu> or <zeyuli@g.ucla.edu>
-    Date Created: 11/23/2020
+    Date Created: 12/04/2020
     Date Last Modified: TODO
     Python Version: 3.6
 '''
