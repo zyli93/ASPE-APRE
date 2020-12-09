@@ -1,3 +1,14 @@
+'''
+    The helper function for dep-parse mining.
+
+    File name: dependency.py
+    Author: Zeyu Li 
+    Email: <zyli@cs.ucla.edu> or <zeyuli@g.ucla.edu>
+    Date Created: 12/04/2020
+    Date Last Modified: TODO
+    Python Version: 3.6
+'''
+
 import spacy
 from spacy.symbols import amod, nsubj, acomp, attr
 from spacy import displacy
@@ -107,7 +118,6 @@ def extract_aspair_deptree_spacy(doc):
                     if conj_subj:
                         aspairs.append((conj_subj, tok.text))
 
-
             # nsubj not found, e.g.: looks great!
             else:
                 aspairs.append((htok.text, tok.text))
@@ -134,4 +144,4 @@ if __name__ == "__main__":
     exp = tcase[-1]
     nlp = spacy.load("en_core_web_sm")
     doc = nlp(exp)
-    print(extract_aspair_depg_spacy(doc))
+    print(extract_aspair_deptree_spacy(doc))

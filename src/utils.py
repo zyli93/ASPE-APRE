@@ -16,8 +16,6 @@ from torch import nn
 from collections import namedtuple
 import math
 
-from vocabulary import UNK_TOKEN, PAD_TOKEN
-
 import sys
 import string
 from nltk.stem import PorterStemmer
@@ -40,6 +38,9 @@ try:
     import _pickle as pickle
 except ImportError:
     import pickle
+
+UNK_TOKEN = "<unk>"
+PAD_TOKEN = "<pad>"
 
 # System functions
 def dump_pkl(path, obj):

@@ -16,3 +16,4 @@ spacy==2.3.2
 mosestokenizer
 autocorrect
 pytorch_pretrained_bert
+transformers

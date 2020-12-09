@@ -26,7 +26,7 @@ from gensim.models import KeyedVectors
 
 from utils import dump_pkl, load_pkl
 from utils import clean_str2
-from dep_parse import extract_aspair_deptree_spacy
+from dependency import extract_aspair_deptree_spacy
 
 COL_DEP_DOC = "dep_review_Doc_list"
 COL_AS_PAIRS = "review_as_pairs"
@@ -272,7 +272,8 @@ def compute_vocab_polarity_from_seeds(
             (word, vocab_postags[word], polarity, mean_pos_pmi, mean_neg_pmi))
     cand_senti_pol.sort(reverse=True, key=lambda x: x[2])
     cand_df = pd.DataFrame(cand_senti_pol,
-                           columns=["word", "POS", "polarity", "Mean Positive PMI", "Mean Negative PMI"])
+                           columns=["word", "POS", "polarity", 
+                                    "Mean Positive PMI", "Mean Negative PMI"])
 
     cand_df.to_csv(args.path + "/cand_senti_pol.csv", index=False)
 
@@ -458,18 +459,21 @@ def get_aspect_senti_pairs(args, senti_term_set):
         Arg:
             s - string of un-sentence-tokenized reviews.
         Return:
-            generator of Doc objects of processed review 
+            doc_list - list of Doc objects of processed review 
+            aspairs - the list of tuples of (aspect, sentiment)
         """
         sentences = sent_tokenize(s)
         # gen = nlp.pipe(sentences, disable=["tagger", "ner"])
         doc_list = [_ for _ in nlp.pipe(sentences, disable=['tagger', 'ner'])]
         selected_dep_rel = set([amod]) 
+        aspairs = []
         for doc in doc_list:
             for tk in doc:
                 if tk.dep in selected_dep_rel and tk.lower_ in senti_term_set:
                     # tk.head [spacy Token], tk.head.text [str]
                     as_pair_set.add((tk.head.text, tk.text))
-        return doc_list
+                    aspairs.append((tk.head.text, tk.text))
+        return doc_list, aspairs
     
     def process_complex(s):
         """helper func. Same as `process` but implements more complex extraction method
@@ -494,7 +498,7 @@ def get_aspect_senti_pairs(args, senti_term_set):
     # changing process to process_complex, returning two 
     if not args.multi_proc_dep_parsing:
         tqdm.pandas()  # use tqdm pandas to enable progress bar for `progress_apply`.
-        train_df[COL_DEP_DOC] = train_df.original_text.progress_apply(process)
+        train_df[COL_DEP_DOC, COL_AS_PAIRS] = train_df.original_text.progress_apply(process)
     else:
         print("\t[Annotate] Using parallel dep parsing." + 
               "Spinning off {} parallel workers ...".format(args.num_workers_mp_dep))
@@ -502,7 +506,7 @@ def get_aspect_senti_pairs(args, senti_term_set):
             nb_workers=args.num_workers_mp_dep,
             progress_bar=True,
             verbose=1)
-        train_df[[COL_DEP_DOC, COL_AS_PAIRS] = train_df.original_text.parallel_apply(process)
+        train_df[[COL_DEP_DOC, COL_AS_PAIRS]] = train_df.original_text.parallel_apply(process)
 
     # save the processed train_df for later use.
     train_df.to_pickle(args.path + "/train_data_dep.pkl")
