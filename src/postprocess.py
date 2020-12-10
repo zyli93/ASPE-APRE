@@ -63,6 +63,7 @@ parser.add_argument(
 
 args = parser.parse_args()
 
+
 class AnnotatedReviewInID:
     def __init__(self, review_text, aspairs, num_asp, max_pad_len=100):
         self.total_num_asp = num_asp
@@ -158,7 +159,7 @@ class AnnotatedReviewInID:
         return self.total_num_asp
 
 
-def convert_data(df):
+def agg_tokenized_data(df):
     """convert data into AnnotatedReviewInID objects
     Args:
         df - the input dataframe
@@ -187,6 +188,7 @@ def convert_data(df):
 
     return user_anno_reviews, item_anno_reviews
 
+
 def main():
     """
     Two parts for post processing. 
@@ -198,6 +200,7 @@ def main():
         CF (user graphs), which has been solved by `graph.py` and build_graph.
         It takes care of the dumping.
     """
+
     # fix path to be ./data/amazon/home_kitchen/
     args.data_path += '/' if args.data_path[-1] != '/' else ""
 
@@ -210,7 +213,7 @@ def main():
     df = pd.read_csv(args.data_path + "train_data.csv")
 
     print("[postprocess] processing user/item annotation reviews ...")
-    user_anno_rev_in_id, item_anno_rev_in_id = convert_data(df=df)
+    user_anno_rev_in_id, item_anno_rev_in_id = agg_tokenized_data(df)
     dump_pkl(args.data_path + "user_anno_idrev.pkl", user_anno_rev_in_id)
     dump_pkl(args.data_path + "item_anno_idrev.pkl", item_anno_rev_in_id)
 
@@ -218,7 +221,7 @@ def main():
     # Part II - user/item graph
     # =====================
 
-    print("[postprocess
+    print("[postprocess] processing user/item neighbor data ...")
     user_nbr, item_nbr = build_graph(path=args.data_path)
     dump_pkl(args.data_path + "user_nbr_item.pkl", user_nbr)
     dump_pkl(args.data_path + "item_nbr_user.pkl", item_nbr)

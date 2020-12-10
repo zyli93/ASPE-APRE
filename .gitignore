@@ -143,6 +143,7 @@ core
 
 # test file `src/test.py`
 src/test.py
+src/old.py
 
 # extractor models
 extractors/RINANTE/core
