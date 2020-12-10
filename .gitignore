@@ -163,3 +163,6 @@ glove/
 
 # temporary directory
 temp/
+
+# log directory
+log/

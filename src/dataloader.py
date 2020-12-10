@@ -7,18 +7,20 @@
     Date Created: 12/04/2020
     Date Last Modified: TODO
     Python Version: 3.6
+
+    TODO: add load testing dataset
 '''
 
 from random import shuffle
 import pandas as pd
-
+from easydict import EasyDict as edict
 from utils import load_pkl
 
 class ReviewInstance:
-    def __init__(self, uid, iid, rtn):
+    def __init__(self, uid, iid, rtg):
         self.user_id = uid
         self.item_id = iid
-        self.rating  = rtn
+        self.rating  = rtg
 
 class DataLoader:
     
@@ -47,6 +49,8 @@ class DataLoader:
         self.train_data = None
         self.train_instances = None
         self.__load_train_data()
+
+        self.num_batch = 0
 
     
     def __load_user_item_reviews(self):
@@ -86,7 +90,7 @@ class DataLoader:
 
         def load_instance(row):
             return ReviewInstance(
-                uid=row['user_id'], iid=row['item_id'], rtn=row['rating'])
+                uid=row['user_id'], iid=row['item_id'], rtg=row['rating'])
 
         print("[DataLoader] initialize, load train datasets ...")
         train_data_path = "./data/amazon/{}/train_data.csv.".format(self.ds)
@@ -96,7 +100,7 @@ class DataLoader:
         self.train_instances = self.train_data.apply(load_instance, axis=1)
         self.train_instances = list(self.train_instances)
 
-    def get_train_batch(self):
+    def get_train_batch_iterator(self):
         """Batch getter
         Note: didn't do sampling here to a fixed size for user/item nbrs
         """
@@ -108,6 +112,7 @@ class DataLoader:
         bs = self.bs
         tail_batch = 1 if len(self.train_instances) % bs else 0
         total_num_batches = len(self.train_instances) // bs + tail_batch
+        self.num_batch = total_num_batches
 
         for i in range(total_num_batches):
             end_idx = min(len(self.train_instances), (i+1) * bs)
@@ -116,6 +121,7 @@ class DataLoader:
             # get user/item ids
             users = [ins.user_id for ins in instances]
             items = [ins.item_id for ins in instances]
+            ratings = [ins.rating for ins in instances]
 
             # get user/item neighbors
             user_nbrs = [self.user_nbr[ins.user_id] for ins in instances]
@@ -125,9 +131,11 @@ class DataLoader:
             user_revs = [self.user_rev[ins.user_id] for ins in instances]
             item_revs = [self.item_rev[ins.item_id] for ins in instances]
 
-            yield {"user_ids": users, "item_ids": items,
-                   "user_nbr": user_nbrs, "item_nbr": item_nbrs,
-                   "user_revs": user_revs, "item_revs": item_revs}
+            yield edict({"batch_idx": i,
+                         "uid": users, "iid": items,
+                         "unbr": user_nbrs, "inbr": item_nbrs,
+                         "urev": user_revs, "irev": item_revs,
+                         "rtg": ratings})
     
     def __shuffle_train_data(self):
         if self.shuffle_train:
