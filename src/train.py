@@ -43,6 +43,8 @@ parser.add_argument("--opimizer", type=str, help="Selection of optimizer")
 parser.add_argument("--load_model", action="store_true", default=False,
                     help="Whether to resume training from an exisint ckpt")
 parser.add_argument("--load_model_path", type=str, help="Path to load existing model")
+parser.add_argument("--padded_length", type=int, default=64,
+                    help="The padded length of input tokens")
 
 # experiment configuration
 parser.add_argument("--experimentID", type=str, required=True,
@@ -100,6 +102,10 @@ def train(model, dataloader):
 
     # model training flag
     model.train()
+
+    if args.load_model:
+        # TODO
+        pass
 
     for ep in args.num_epoch:
         trn_iter = dataloader.get_train_batch_iterator()

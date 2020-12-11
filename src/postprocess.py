@@ -26,6 +26,8 @@ from scipy.sparse import csr_matrix
 from transformers import BertTokenizerFast
 from pandarallel import pandarallel
 
+import torch
+
 from graph import build_graph
 from utils import dump_pkl
 
@@ -92,7 +94,7 @@ class AnnotatedReviewInID:
                 "But a {} received!".format(str(type(review_text))))
         
         # return PyTorch-styled ("pt") padded tensors
-        self.tokenized_revsents = tokenizer.tokenize(
+        self.tokenized_revsents = tokenizer(
             self.review_sents, return_tensors="pt", padding=True)
         # get the shape of tokenized_review_sents
         tkn_revsents_input_ids = self.tokenized_revsents['input_ids']
@@ -157,6 +159,75 @@ class AnnotatedReviewInID:
     
     def get_num_asp(self):
         return self.total_num_asp
+
+
+class EntityReviewAggregation:
+    def __init__(self, reviews, aspairs, pad_len, num_asp):
+        # test sizes of reviews and aspairs
+        if len(reviews) != len(aspairs):
+            raise ValueError("Reviews and Aspairs sizes don't match!")
+        
+        if not all([isinstance(text, str) for text in reviews]):
+            raise TypeError("There exists reviews that are NOT str")
+            
+        self.pad_len = pad_len
+        self.num_asp = num_asp
+        
+        # create tokenizer
+        tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased")
+
+        # first tokenize reviews
+        self.tokenized_revs = tokenizer(
+            reviews, return_tensors="pt", padding="max_length", 
+            max_length=pad_len, truncation=True)
+        
+        # get shape and pad to `pad_len`
+        tokenizer_padded_shape = self.tokenized_revs['input_ids'].shape
+        if tokenizer_padded_shape[1] < pad_len:
+            for field in ['input_ids', 'token_type_ids', 'attention_mask']:
+                self.tokenized_revs[field] = self.__pad_to_fixedlen(
+                    self.tokenized_revs[field])
+            
+        input_ids_tensor = self.tokenized_revs['input_ids']
+        
+        # tokenize aspairs
+        self.revs_asp_mention_locs = []
+        for i, aspair_list in enumerate(aspairs):
+            senti_id_to_asp = defaultdict(list)
+            for asp, senti in aspair_list:
+                senti_id = tokenizer(senti, 
+                    add_special_tokens=False)['input_ids'][0]
+                senti_id_to_asp[senti_id].append(asp)
+
+            # asp_id_loc is (num_asp * pad_len) matrix, saves location of asp
+            asp_mention_loc = np.zeros(
+                (self.num_asp, self.pad_len), dtype=np.int32)
+            for senti_id in senti_id_to_asp:
+                loc_vector = (input_ids_tensor[i] == senti_id)\
+                             .numpy().astype(np.int32)
+                for asp_i in senti_id_to_asp[senti_id]:
+                    asp_mention_loc[asp_i] += loc_vector
+            self.revs_asp_mention_locs.append(csr_matrix(asp_mention_loc))
+    
+        # TODO: getters and setters
+            
+                        
+    
+    def __pad_to_fixedlen(self, tensor):
+        """pad to fixed length.
+
+        Args:
+            tensor - tensor already padded to a certain flexible length 
+        """
+        height = tensor.shape[0]
+        width = self.pad_len - tensor.shape[1]
+        return torch.cat(
+            (tensor, torch.zeros(size=(height, width), dtype=tensor.dtype)), 
+            dim=1)
+
+        
+            
+
 
 
 def agg_tokenized_data(df):
