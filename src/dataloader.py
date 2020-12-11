@@ -7,16 +7,16 @@
     Date Created: 12/04/2020
     Date Last Modified: TODO
     Python Version: 3.6
-
-    TODO: add load testing dataset
 '''
 
+import logging
 from random import shuffle
 import pandas as pd
 from easydict import EasyDict as edict
+
 from utils import load_pkl
 
-class ReviewInstance:
+class RateInstance:
     def __init__(self, uid, iid, rtg):
         self.user_id = uid
         self.item_id = iid
@@ -48,10 +48,8 @@ class DataLoader:
         
         self.train_data = None
         self.train_instances = None
-        self.__load_train_data()
-
-        self.num_batch = 0
-
+        self.train_batch_num, self.test_batch_num = 0, 0
+        self.__load_traintest_data()
     
     def __load_user_item_reviews(self):
         """[private] load aggregated reviews for user/item
@@ -82,41 +80,63 @@ class DataLoader:
         print("[DataLoader] loading user/item reviews ...")
         self.user_rev, self.item_rev = self.__load_user_item_reviews()
 
-        print("[DataLoader] data loading done!")
+        print("[DataLoader] info data loading done!")
     
-    def __load_train_data(self):
-        """load training data (aka <user, item, rating> triplets) 
-           and convert them into ReviewInstance objects"""
+    def __load_traintest_data(self):
+        """load training/test data (aka <user, item, rating> triplets) 
+           and convert them into RateInstance objects"""
 
         def load_instance(row):
-            return ReviewInstance(
+            return RateInstance(
                 uid=row['user_id'], iid=row['item_id'], rtg=row['rating'])
 
         print("[DataLoader] initialize, load train datasets ...")
         train_data_path = "./data/amazon/{}/train_data.csv.".format(self.ds)
         self.train_data = pd.read_csv(train_data_path)
 
-        # series to list
+        print("[DataLoader] initialize, process train datset ...")
         self.train_instances = self.train_data.apply(load_instance, axis=1)
         self.train_instances = list(self.train_instances)
 
-    def get_train_batch_iterator(self):
+        tail_batch = 1 if len(self.train_instances) % self.bs else 0
+        self.train_batch_num = len(self.train_instances) // self.bs + tail_batch
+
+        print("[DataLoader] initialize, load test datasets ...")
+        test_data_path = "./data/amazon/{}/test_data.csv.".format(self.ds)
+        self.test_data = pd.read_csv(test_data_path)
+
+        print("[DataLoader] initialize, process train datset ...")
+        self.test_instances = self.test_data.apply(load_instance, axis=1)
+        self.test_instances  = list(self.test_data)
+
+        tail_batch = 1 if len(self.test_instances) % self.bs else 0
+        self.test_batch_num = len(self.test_instances) // self.bs + tail_batch
+
+        print("[DataLoader] train/test data loading done!")
+
+    def get_batch_iterator(self, for_train=True):
         """Batch getter
         Note: didn't do sampling here to a fixed size for user/item nbrs
         """
 
-        if self.recurrent_iteration:
+        if self.recurrent_iteration and for_train:
+            logging.info("shuffling training data")
             self.__shuffle_train_data()
+            logging.info("shuffling done.")
             self.recurrent_iteration = True
+        
+        if for_train:
+            num_batches = self.train_batch_num
+            data_instances = self.train_instances
+        else:
+            num_batches = self.test_batch_num
+            data_instances = self.test_instances
 
         bs = self.bs
-        tail_batch = 1 if len(self.train_instances) % bs else 0
-        total_num_batches = len(self.train_instances) // bs + tail_batch
-        self.num_batch = total_num_batches
 
-        for i in range(total_num_batches):
-            end_idx = min(len(self.train_instances), (i+1) * bs)
-            instances = self.train_instances[i * bs, end_idx]
+        for i in range(num_batches):
+            end_idx = min(len(data_instances), (i+1) * bs)
+            instances = data_instances[i * bs, end_idx]
             
             # get user/item ids
             users = [ins.user_id for ins in instances]
