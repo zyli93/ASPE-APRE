@@ -3,11 +3,11 @@ Rating prediction with Unsupervised Aspect-level Review Analysis (RUARA)
 
 ## The TODO list
 
-- [ ] implement user review aggregation and item review aggregation for Amazon & Yelp (in annotate.py)
+- [x] implement user review aggregation and item review aggregation for Amazon & Yelp (in annotate.py)
 - [x] add dependency info for nlp toolkits such as nltk and spaCy
 - [x] check if the strings need better processing?
 - [x] filter out too long or too short reviews
-- [ ] pmi compute error in TagGCN because `combinations()` doesn't consider order
+- [x] pmi compute error in TagGCN because `combinations()` doesn't consider order
 - [x] preprocessing code cannot deal with text = `NaN`
 - [x] put in note that order by speed: 
     nothing > clean_str w/o spellcheck (sc) > clean_str w/ sc
@@ -17,7 +17,7 @@ Rating prediction with Unsupervised Aspect-level Review Analysis (RUARA)
 - [x] add example of result of PMI annotation
 - [x] add notes for deleting RB and using JJ only
 - [x] add gensim with glove embedding
-- [ ] use higher dimension of glove
+- [x] use higher dimension of glove
 
 ## Data and External Resources
 
@@ -218,19 +218,22 @@ We managed to run `SDRN`, a Bert-based model for aspect and sentiment co-extract
    3. Another problem that I encountered was the `.gamma` and `.beta` of `BertLayerNorm`. Laster fixed it by finding the original `modeling.py`.
 7. Train the model with the given datasets: 2014Lap.pt, 2014Res.pt, 2015Res.pt. Using the folliwing script:
     ```bash
-    [in_SDRN_dir]$ bash train_sdrn.sh [dataset] [No. of epochs]
+    # run one corpus by corpus
+    [in_SDRN_dir]$ bash scripts/train_sdrn.sh [dataset] [No. of epochs]
+    # run everything
+    [in_SDRN_dir]$ bash scripts/train_all.sh
     # e.g.
-    [in_SDRN_dir]$ bash train_sdrn.sh 2014Res 5
+    [in_SDRN_dir]$ bash scripts/train_sdrn.sh 2014Res 5
     ```
     Below are the number of epochs I used to train SDRN.
 
     |Name  | 2014Lap | 2014Res | 2015Res |
     |------|---------|---------|---------|
-    |#. Ep | 
+    |#. Ep |  5      | 5       | 5       |
   
 8. Massage our data into SDRN-compatible format and run inference (annotation). We wrote a Python script to do the work using the preprocessed Amazon data. Note that it takes a long time to run.
     ```bash
-    [in_SDRN_dir]$ bash scrips/run_inference.sh
+    [in_SDRN_dir]$ bash scripts/run_inference.sh
     ```
     Detailed parameters within `run_inference.sh`.
     ```bash
@@ -240,15 +243,16 @@ We managed to run `SDRN`, a Bert-based model for aspect and sentiment co-extract
     - to_process: True/False, whether to rerun formatting Amazon data to SDRN data
     - training_set: The dataset that trains the SDRN model
     - annotate subset: The Amazon subset to process
-    - head: (positive) number of top lines of Amazon data to process; 
-            (negative) process the whole dataset.
+    - head: Positive number: number of top lines of Amazon data to process; 
+            Negative number: process the whole dataset.
 9. Parse the output annotation file. Please run the following command
     ```bash
     python parse_output.py [training set] [annotate subset]
     ```
     The definition of the parameters are the same as point 8. The output will be 
-    1. `./data/anno_[subset]/aspect_terms.pkl`: the aspect terms list pickle.
-    2. `./data/anno_[subset]/sentiment_terms.pkl`: the sentiment terms list pickle.
+    1. `./data/anno_[train_set]_[subset]/aspect_terms.pkl`: the aspect terms list pickle.
+    2. `./data/anno_[train_set]_[subset]/sentiment_terms.pkl`: the sentiment terms list pickle.
+    For example, `./data/anno_2014Lap_digital_music/aspect_terms.pkl` saves all aspect terms extracted by a 2014Lap-trained SDRN model for the dataset `digital_music`.
 
 
 #### RINANTE

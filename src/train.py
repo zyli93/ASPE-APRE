@@ -63,6 +63,8 @@ parser.add_argument("--disable_cf", action="store_true", default=False,
                     help="Flag to disable the CF channel")
 parser.add_argument("--num_aspects", type=int, required=True,
                     help="Number of close-domain aspects in total")
+parser.add_argument("--aspemb_max_norm", type=int, default=-1,
+                    help="Max norm of aspect embedding. Set -1 for None.")
 
 # save model configeration
 parser.add_argument("--save_model", action="store_true", default=False,

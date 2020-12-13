@@ -26,9 +26,23 @@ class APRE(nn.Module):
         1. Add turn on/off structure
     """
 
-    def __init__(self):
+    def __init__(self, args):
         super(APRE, self).__init__()
 
+        # settings 
+        self.use_exp = not args.disable_explicit
+        self.use_imp = not args.disable_implicit
+        self.use_cf = not args.disable_cf
+
+        # Whether the model returns all hidden-states.
+        self.bert = BertModel.from_pretrained('bert-base-uncased',
+            output_hidden_states=True)
+        
+        # aspect representation
+        max_norm = args.aspemb_max_norm if args.aspemb_max_norm > 0 else None
+        self.emb_aspect = nn.Embedding(num_embeddings=args.num_aspects,
+            max_norm=max_norm)
+        
         # Channel 1 - Explicit
 
         # Channel 2 - Implicit
@@ -37,9 +51,26 @@ class APRE(nn.Module):
         pass
 
 
-    def forward(x):
-        """forward function of APRE"""
-        pass
+    def forward(batch):
+        """forward function of APRE
+
+        batch - [Dict] created by easydict. Domains included are `batch_idx`,
+            `uid`, `iid`, `unbr`, `inbr`, `urev`, `irev`, `rtg`.
+            * urev/irev - (list[EntityReviewAggregation])
+            * unbr/inbr - (list[user_id] or list[item_id])
+        """
+        # combine urev/irev, get split shape
+        # feed user revs and item revs
+        # split by shapes
+
+        if self.use_exp:
+            pass
+        
+        if self.use_imp:
+            pass
+
+        if self.use_cf:
+            pass
 
 
 
