@@ -52,7 +52,7 @@ if __name__ == "__main__":
     
     train_set = sys.argv[1]
     subset = sys.argv[2]
-    print("load file")
+    print("load file {} {}".format(train_set, subset))
     data = load_output_annotation_file(train_set, subset)
     aspect_set, sentiment_set = parse_annotation(data)
 

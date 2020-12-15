@@ -28,6 +28,7 @@ from torch.utils.data.sampler import RandomSampler, SequentialSampler
 
 import pickle
 
+
 DATA = "../../data/amazon/"
 VOCAB = "./bert_model/vocab.txt"
 
@@ -212,7 +213,7 @@ def inference(dataloader, inf_set, model, output_file_path, ifgpu=True):
             output_file.write("\n")
 
 if __name__ == '__main__':
-    if len(sys.argv) != 4 + 1:
+    if len(sys.argv) != 5 + 1:
         print("Usage\n\t" + 
               "python {} [do_process] [training data] [annotate subset] [head]".format(sys.argv[0]))
         sys.exit()
@@ -223,6 +224,10 @@ if __name__ == '__main__':
     model_path = "./model/{}/modelFinal.model".format(training_set)
     batch_size = 100
     head = int(sys.argv[4])
+    gpu_id = sys.argv[5]
+
+    os.environ['CUDA_VISIBLE_DEVICES'] = gpu_id
+
     if head < 0:
         head = None
     output_file_dir = "./infer_on_ruara_{}/".format(training_set)
@@ -253,6 +258,7 @@ if __name__ == '__main__':
         print("load dataloader and instances ...")
         dataloader = load_pkl("./data/dataloader_{}.pkl".format(subset))
         instances = load_pkl("./data/instances_{}.pkl".format(subset))
+        # dataloader, instances = None, None
 
     print("load model ...")
     model = torch.load(model_path, map_location="cuda:0")

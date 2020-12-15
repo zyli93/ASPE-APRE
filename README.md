@@ -229,7 +229,7 @@ We managed to run `SDRN`, a Bert-based model for aspect and sentiment co-extract
 
     |Name  | 2014Lap | 2014Res | 2015Res |
     |------|---------|---------|---------|
-    |#. Ep |  5      | 5       | 5       |
+    |#. Ep |  5      |  10     | 8       |
   
 8. Massage our data into SDRN-compatible format and run inference (annotation). We wrote a Python script to do the work using the preprocessed Amazon data. Note that it takes a long time to run.
     ```bash
