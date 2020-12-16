@@ -55,8 +55,8 @@ class DataLoader:
         """[private] load aggregated reviews for user/item
         
         Returns:
-            user_annotated_reviews: [dict] {uid: [list of AnnotatedReview]}
-            item_annotated_reviews: [dict] {iid: [list of AnnotatedReview]}
+            user_annotated_reviews: [dict] {uid: EntityReviewAggregation}
+            item_annotated_reviews: [dict] {iid: EntityReviewAggregation}
         """
         user_review_path = "./data/amazon/{}/user_anno_reviews.pkl".format(self.ds)
         item_review_path = "./data/amazon/{}/item_anno_reviews.pkl".format(self.ds)

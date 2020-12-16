@@ -339,17 +339,20 @@ def load_sdrn_sentiment_annotation_terms(args):
     Return:
         sdrn_senti_words - [Set] of SDRN annotated sentiment words.
     """
-    if not os.path.exists(args.sdrn_anno_path):
-        raise FileNotFoundError(
-            "SDRN annotation file NOT found here: {}".format(args.sdrn_anno_path))
-    anno_file = args.sdrn_anno_path
+    dataset = args.path.split("/")[-1]
     sdrn_senti_words = set()
-    with open(anno_file, "r") as fin:
-        for i, line in enumerate(fin.readlines()):
-            if len(line) > 1:
-                token, tag = line.strip().split("\t")
-                if tag in ['B-P', 'I-P']:
-                    sdrn_senti_words.add(token)
+    for train_set in ["2014Lap", "2015Res", "2014Res"]:
+        anno_file = args.sdrn_anno_path + train_set + \
+            "/annotation_{}.txt".format(dataset)
+        if not os.path.exists(anno_file):
+            raise FileNotFoundError(
+                "SDRN annotation file NOT found here: {}".format(anno_file))
+        with open(anno_file, "r") as fin:
+            for i, line in enumerate(fin.readlines()):
+                if len(line) > 1:
+                    token, tag = line.strip().split("\t")
+                    if tag in ['B-P', 'I-P']:
+                        sdrn_senti_words.add(token)
     
     return sdrn_senti_words
 
@@ -516,26 +519,26 @@ def get_aspect_senti_pairs(args, senti_term_set):
 
 def main(args):
     print("[Annotate] getting sentiment terms ...")
-    # term_sets = get_sentiment_terms(args)  # uncomment afterward
+    term_sets = get_sentiment_terms(args)
 
-    # ==== temp code blow =====
+    # # ==== temp code blow =====
 
-    # dump_pkl("temp/term_set.pkl", term_sets)
+    # # dump_pkl("temp/term_set.pkl", term_sets)
 
-    term_sets = load_pkl("temp/term_set.pkl")
-    term_sets = list(term_sets)
-    term_sets[0] = set(term_sets[0])
+    # term_sets = load_pkl("temp/term_set.pkl")
+    # term_sets = list(term_sets)
+    # term_sets[0] = set(term_sets[0])
     
-    sdrn_set = load_sdrn_sentiment_annotation_terms(args)
-    term_sets[1] = sdrn_set
+    # sdrn_set = load_sdrn_sentiment_annotation_terms(args)
+    # term_sets[1] = sdrn_set
 
-    print(type(term_sets))
-    print(len(term_sets))
-    print([type(x) for x in term_sets])
-    print("[Annotate] unioning {} sets ...".format(len(term_sets)))
+    # print(type(term_sets))
+    # print(len(term_sets))
+    # print([type(x) for x in term_sets])
+    # print("[Annotate] unioning {} sets ...".format(len(term_sets)))
 
-    term_set = set.union(*term_sets)  # merge all term sets, 2 or 3
-    dump_pkl("temp/term_set.pkl", term_set)
+    # term_set = set.union(*term_sets)  # merge all term sets, 2 or 3
+    dump_pkl("temp/term_set.pkl", term_sets)
 
     # ===== temp code above ====
 
@@ -564,13 +567,13 @@ if __name__ == "__main__":
         "--sdrn_anno_path",
         type=str,
         required=True,
-        help="Path to SDRN annotation results")
+        help="Path to SDRN annotation results in `.txt`")
 
     parser.add_argument(
         "--pmi_window_size",
         type=int,
-        default=3,
-        help="The window size of PMI cooccurance relations. Default=3.")
+        default=5,
+        help="The window size of PMI cooccurance relations. Default=5.")
 
     parser.add_argument(
         "--token_min_count",
@@ -581,7 +584,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num_senti_terms_per_pol",
         type=int,
-        default=300,
+        default=500,
         help="Number of sentiment terms per seed. Default=300.")
     
     parser.add_argument(

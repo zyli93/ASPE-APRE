@@ -17,3 +17,5 @@ mosestokenizer
 autocorrect
 pytorch_pretrained_bert
 transformers
+pandarallel
+gensim
