@@ -63,6 +63,12 @@ parser.add_argument(
     default=8,
     help="Number of multithread workers")
 
+parser.add_argument(
+    '--num_last_layers",
+    type=int,
+    default=4,
+    help="Number of last layers of BERT fed downstream")
+
 args = parser.parse_args()
 
 

@@ -38,6 +38,7 @@ class APRE(nn.Module):
         self.use_imp = not args.disable_implicit
         self.use_cf = not args.disable_cf
         self.nlast_lyr = args.num_last_layers
+        self.num_asp = args.num_aspects
         self.bert_dim = 768
 
         # set device
@@ -58,6 +59,15 @@ class APRE(nn.Module):
         self.emb_aspect = nn.Embedding(num_embeddings=args.num_aspects,
             max_norm=max_norm)
         
+        # aspect embedding num_asp * 768
+        self.emb_asp = nn.Parameters(torch.randn(self.num_asp, self.bert_dim))
+
+        # review-wise att
+        self.urev_dim_attn = nn.Linear(in_features=self.bert_dim*2,
+            out_features=1, bias=False)
+        self.irev_dim_attn = nn.Linear(in_features=self.bert_dim*2,
+            out_features=1, bias=False)
+        
         # =========================
         #   BERT out linears
         # =========================
@@ -67,12 +77,22 @@ class APRE(nn.Module):
             in_features=self.bert_dim*self.nlast_lyr, out_features=self.bert_dim)
         
         
-        # Channel 1 - Explicit
+        # ==========================
+        # For Explicit
+        # ==========================
+        self.urev_attn_linear = nn.Linear(bias=False,
+            in_features=self.bert_dim, out_features=1)
+        self.irev_attn_linear = nn.Linear(bias=False,
+            in_features=self.bert_dim, out_features=1)
 
         # Channel 2 - Implicit
+        self.urev_attn_linear_impl = nn.Linear(bias=False,
+            in_features=self.bert_dim, out_features=1)
+        self.irev_attn_linear_impl = nn.Linear(bias=False,
+            in_features=self.bert_dim, out_features=1)
 
         # Channel 3 - CF
-        pass
+        # pass
 
 
     def forward(self, batch):
@@ -125,13 +145,12 @@ class APRE(nn.Module):
 
         # get last layers output
         # `ll` is short of `last layers`
-        # nlast_lyr* (ttl_nrev, pad_len, 768)
-        #   ==> ttl_nrev, pad_len, 768*nlast_lyr
+        # nlast_lyr* (ttl_nrev, pad_len, 768) ==> ttl_nrev, pad_len, 768*nlast_lyr
         #   ==> (ttl_nrev, pad_len, 768)
         # TODO: in addition to linear, can also use sum/avg/max pool
-        ll_uout = self.ubert_out_linear(
+        ull_out = self.ubert_out_linear(
             torch.cat(uenc[2][-self.nlast_lyr:], dim=-1))
-        ll_iout = self.ibert_out_linear(
+        ill_out = self.ibert_out_linear(
             torch.cat(ienc[2][-self.nlast_lyr:], dim=-1)) # (ttl_nrev, pl, 768)
 
         # TODO: detail understanding of device!
@@ -154,19 +173,99 @@ class APRE(nn.Module):
                 [x.toarray() for _rev in batch.irev
                     for x in _rev.get_anno_tkn_revs[1]], axis=0),
                 device=self.device)
+
+            # user/item representation
+            uasp_repr = torch.matmul(urevs_loc, ull_out)  # ttl_nrev, num_asp, 768
+            iasp_repr = torch.matmul(irevs_loc, ill_out)
+
+            # bs tuple of (nrev*num_asp*768)
+            uasp_repr_spl = torch.split(uasp_repr, u_split, dim=0)
+            iasp_repr_spl = torch.split(iasp_repr, i_split, dim=0)
+            
+            # get attention agg
+            uasp_repr_agg, iasp_repr_agg = [], []
+            for i in range(len(u_split)):
+                # NOTE: method2 without concatenation
+                num_rev = u_split[i]
+                exp_emb_aspect = self.emb_aspect.unsqueeze_(0).expand(num_rev)
+
+                # cat => nrev*num_asp*(768+768)
+                # linear => nrev*num_asp*1
+                urev_attn_w = F.softmax(dim=0, input=F.tanh(
+                        self.urev_attn_linear(torch.cat((uasp_repr_spl[i], 
+                                                      exp_emb_aspect), dim=2))))
+                # mul => nrev*num_asp*768, sum => num_asp*768
+                uasp_repr_revagg = torch.sum(torch.mul(
+                    urev_attn_w, uasp_repr_spl[i]), dim=0, keepdim=False)
+                
+                irev_attn_w = F.softmax(dim=0, input=F.tanh(
+                        self.irev_attn_linear(torch.cat((iasp_repr_spl[i], 
+                                                      exp_emb_aspect), dim=2))))
+                iasp_repr_revagg = torch.sum(torch.mul(
+                    irev_attn_w, iasp_repr_spl[i]), dim=0, keepdim=False)
+                
+                uasp_repr_agg.append(uasp_repr_revagg)
+                iasp_repr_agg.append(iasp_repr_revagg)
+            
+            # bs*num_asp* 768
+            u_expl_repr = torch.stack(uasp_repr_agg, dim=0)
+            i_expl_repr = torch.stack(iasp_repr_agg, dim=0)
+
+            # TODO
+
+        
+        if self.use_imp:
+            # handling ull_out/ill_out (ttl_nrev, pad_len, 768)
+            
+            # [CLS] rep, (ttl_nrev, 768)
+            urevs_cls_repr, irevs_cls_repr = uenc[1], ienc[1]
+            
+            # avgpooling without sum=> ttl_nrev, 768
+            # div => (ttl_nrev, 768)
+            urevs_avgpool_repr = torch.div(
+                torch.sum(ull_out, dim=1), torch.sum(ull_out!=0, dim=1))
+            irevs_avgpool_repr = torch.div(
+                torch.sum(ill_out, dim=1), torch.sum(ill_out!=0, dim=1))
+            
+            # concat=> ttl_nrev, 768*2
+            uimpl = torch.cat([urevs_cls_repr, urevs_avgpool_repr], dim=-1)
+            iimpl = torch.cat([irevs_cls_repr, irevs_avgpool_repr], dim=-1)
+
+            uimpl_spl = torch.split(uimpl, u_split):w
+            
+            iimpl_spl = torch.split(iimpl, i_split)
+
+            uimpl_repr_agg, iimpl_repr_agg = [], []
+            for i in range(len(u_split)):
+                # nrev*768 
+                # linear => nrev*1, tanh, softmax (no change on size)
+                uimpl_rev_w = F.softmax(dim=0, input=F.tanh(
+                    self.urev_attn_linear_impl(uimpl_spl[i])))
+                iimpl_rev_w = F.softmax(dim=0, imput=F.tanh(
+                    self.irev_attn_linear_impl(iimpl_spl[i])))
+                
+                uimpl_rev_attn_agg = torch.sum(
+                    torch.mul(uimpl_spl[i], uimpl_rev_w), dim=0)
+                iimpl_rev_attn_agg = torch.sum(
+                    torch.mul(iimpl_spl[i], iimpl_rev_w), dim=0)
+                
+                uimpl_repr_agg.append(uimpl_rev_attn_agg)
+                iimpl_repr_agg.append(iimpl_rev_attn_agg)
+            
+            # bs*768
+            u_impl_repr = torch.stack(uimpl_repr_agg, dim=0)
+            i_impl_repr = torch.stack(iimpl_repr_agg, dim=0)
+
+
+        if self.use_cf:
+            # TODO: verify if uid/iid are int
             
 
 
 
-        
-        if self.use_imp:
-            pass
-
-        if self.use_cf:
-            pass
-
-
-
+        # ======================
+        #   Merge three channel
+        # ======================
 
 def main():
     # TODO: maybe add some testing
