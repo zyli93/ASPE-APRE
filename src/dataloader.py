@@ -160,3 +160,9 @@ class DataLoader:
     def __shuffle_train_data(self):
         if self.shuffle_train:
             shuffle(self.train_instances)
+
+    def get_train_batch_num(self):
+        return self.train_batch_num
+
+    def get_test_batch_num(self):
+        return self.test_batch_num
