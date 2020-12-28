@@ -119,35 +119,62 @@ python src/preprocess.py --dataset=amazon --amazon_subset=digital_music
 
 **Note**: We noticed that there exist words which are misspelled and can damage the PMI for aspect words. 
 
+### Prepare for NN-based and Lexicon-based extraction
+
+
+
 ### Unsupervised aspect annotation
 
-The `annotate.py` is in charge of annotating the aspects and corresponding opinion. Detailed instructions are below.
+We run `annotate.py` to do the job. The `annotate.py` is in charge of the following tasks:
+1. Compute P(w_i, w_j) and P(w_i).
+2. Compute PMI for each word in the corpus.
+3. Load sentiment terms extracted by the NN-based and Lexicon-based methods.
+4. Use dependency parsing technique to find aspect-sentiment pair candidates. (AS-pairs)
+5. Save extracted AS-pairs.
+
+ Detailed instructions are below.
 
 ```text
-usage: annotate.py [-h] --path PATH [--pmi_window_size PMI_WINDOW_SIZE]
+usage: annotate.py [-h] --path PATH --sdrn_anno_path SDRN_ANNO_PATH
+                   [--pmi_window_size PMI_WINDOW_SIZE]
                    [--token_min_count TOKEN_MIN_COUNT]
-                   [--aspect_candidate_quota_per_seed ASPECT_CANDIDATE_QUOTA_PER_SEED]
+                   [--num_senti_terms_per_pol NUM_SENTI_TERMS_PER_POL]
+                   [--use_senti_word_list] [--glove_dimension GLOVE_DIMENSION]
+                   [--multi_proc_dep_parsing]
+                   [--num_workers_mp_dep NUM_WORKERS_MP_DEP]
 
 optional arguments:
   -h, --help            show this help message and exit
-  --path PATH           Path to the dataset goodreads
+  --path PATH           Path to the dataset.
+  --sdrn_anno_path SDRN_ANNO_PATH
+                        Path to SDRN annotation results in `.txt`
   --pmi_window_size PMI_WINDOW_SIZE
                         The window size of PMI cooccurance relations.
-                        Default=3.
+                        Default=5.
   --token_min_count TOKEN_MIN_COUNT
                         Minimum token occurences in corpus. Rare tokens are
                         discarded. Default=20.
-  --aspect_candidate_quota_per_seed ASPECT_CANDIDATE_QUOTA_PER_SEED
-                        Number of candidate aspect opinion word to extract per
-                        seed. Default=3.
+  --num_senti_terms_per_pol NUM_SENTI_TERMS_PER_POL
+                        Number of sentiment terms per seed. Default=300.
+  --use_senti_word_list
+                        If used, sentiment word table will be used as well.
+  --glove_dimension GLOVE_DIMENSION
+                        The dimension of glove to use in the PMI parsing.
+                        Default=100.
+  --multi_proc_dep_parsing
+                        If used, parallel processing of dependency parsing
+                        will be enabled.
+  --num_workers_mp_dep NUM_WORKERS_MP_DEP
+                        Number of workers to be spinned off for multiproc dep
+                        parsing..
 ```
 
 Here's an example for parsing the _Digital Music_ dataset for Amazon.
 ```
-python src/annotate.py --path=./data/amazon/digital_music
+bash scripts/run_annotate.sh digital_music
 ```
 
-Here's the annotation pipeline in `annotate.py`:
+Here's the detailed annotation pipeline of PMI in `annotate.py`:
 
 1. Load dataset and hard-coded files: POS tags as filters of aspect sentiment (`fine_grained.pos.json`) and seed words for sentiment words (`seed_words.json`).
 2. Compute PMI of existing word pairs in the corpus.
@@ -174,10 +201,16 @@ much            ,JJ  ,0.23952869087514955     ,-0.23410520554168252   ,-0.473633
 awesome         ,JJ  ,0.22824133572268956     ,-0.2510182876984033    ,-0.47925962342109285
 ```
 
+Most important results `annotate.py` generates:
+1. `train_data_dep.pkl`: the pickle file of dataframe with a column containing `spacy.doc` objects.
+2. `pmi_senti_terms.pkl`: sentiment terms extracted by PMI methods.
 
 **Notes and Discussions**:
  1. If `--pmi_window_size` is increased, then `--token_min_count` should be increased as well to remove rare tokens. Usually, these rare tokens come from 
   misspelling of users of review sites.
+
+
+### Aspect-sentiment term co-extraction
 
 ### Aspect and Opinion Extractor with ML models
 
@@ -219,11 +252,11 @@ We managed to run `SDRN`, a Bert-based model for aspect and sentiment co-extract
 7. Train the model with the given datasets: 2014Lap.pt, 2014Res.pt, 2015Res.pt. Using the folliwing script:
     ```bash
     # run one corpus by corpus
-    [in_SDRN_dir]$ bash scripts/train_sdrn.sh [dataset] [No. of epochs]
+    [in SDRN dir]$ bash scripts/train_sdrn.sh [dataset] [No. of epochs]
     # run everything
-    [in_SDRN_dir]$ bash scripts/train_all.sh
+    [in SDRN dir]$ bash scripts/train_all.sh
     # e.g.
-    [in_SDRN_dir]$ bash scripts/train_sdrn.sh 2014Res 5
+    [in SDRN dir]$ bash scripts/train_sdrn.sh 2014Res 5
     ```
     Below are the number of epochs I used to train SDRN.
 
@@ -233,11 +266,11 @@ We managed to run `SDRN`, a Bert-based model for aspect and sentiment co-extract
   
 8. Massage our data into SDRN-compatible format and run inference (annotation). We wrote a Python script to do the work using the preprocessed Amazon data. Note that it takes a long time to run.
     ```bash
-    [in_SDRN_dir]$ bash scripts/run_inference.sh
+    [in SDRN dir]$ bash scripts/run_inference.sh
     ```
     Detailed parameters within `run_inference.sh`.
     ```bash
-    python ruara_evaluate.py [do_process] [training data] [annotate subset] [head]
+    [in SDRN dir]$ python ruara_evaluate.py [do_process] [training data] [annotate subset] [head] [gpu_id]
     ```
     The semantic of parameters:
     - to_process: True/False, whether to rerun formatting Amazon data to SDRN data
@@ -245,14 +278,20 @@ We managed to run `SDRN`, a Bert-based model for aspect and sentiment co-extract
     - annotate subset: The Amazon subset to process
     - head: Positive number: number of top lines of Amazon data to process; 
             Negative number: process the whole dataset.
+    - gpu_id: the GPU to use.
 9. Parse the output annotation file. Please run the following command
     ```bash
-    python parse_output.py [training set] [annotate subset]
+    [in SDRN dir]$ python parse_output.py [task] [training set] [annotate subset]
     ```
-    The definition of the parameters are the same as point 8. The output will be 
+    The definition of the parameters are the same as those in point 8 except `task` which can be `parse` and `merge`. 
+    
+    For `parse`, the output will be 
     1. `./data/anno_[train_set]_[subset]/aspect_terms.pkl`: the aspect terms list pickle.
     2. `./data/anno_[train_set]_[subset]/sentiment_terms.pkl`: the sentiment terms list pickle.
     For example, `./data/anno_2014Lap_digital_music/aspect_terms.pkl` saves all aspect terms extracted by a 2014Lap-trained SDRN model for the dataset `digital_music`.
+
+    For `merge`, take output from the above step and merge the sentiment terms sets. Produce results to `./data/senti_term_[subset]_merged.pkl`.
+10. Until here, the SDRN term extraction is done.
 
 
 #### RINANTE

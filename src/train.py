@@ -13,6 +13,7 @@ import os
 import sys
 import argparse
 import logging
+from datetime import datetime
 
 import torch
 import torch.nn as nn
@@ -37,45 +38,37 @@ parser.add_argument("--task", type=str, require=True, help="Train/Test/Both?")
 parser.add_argument("--dataset", type=str, required=True, help="The dataset.")
 parser.add_argument("--shuffle", action="store_true", default=False,
                     help="Whether to shuffle data before a new epoch")
-parser.add_argument("--batch_size", type=int, default=128,
-                    help="The batch size of each iteration")
-parser.add_argument("--learning_rate", type=float, default=0.001, 
-                    help="Learning rate")
+parser.add_argument("--batch_size", type=int, default=128, help="The batch size of each iteration")
+parser.add_argument("--learning_rate", type=float, default=0.001, help="Learning rate")
 parser.add_argument("--num_epoch", type=int, default=20, help="Number of epoches")
 parser.add_argument("--opimizer", type=str, help="Selection of optimizer")
 parser.add_argument("--load_model", action="store_true", default=False,
                     help="Whether to resume training from an existing ckpt")
 parser.add_argument("--load_model_path", type=str, help="Path to load existing model")
-parser.add_argument("--padded_length", type=int, default=64,
-                    help="The padded length of input tokens")
+parser.add_argument("--padded_length", type=int, default=64, help="The padded length of input tokens")
 
 # experiment configuration
-parser.add_argument("--experimentID", type=str, required=True,
-                    help="The ID of the experiments")
+parser.add_argument("--experimentID", type=str, required=True, help="The ID of the experiments")
 parser.add_argument("--log_iter_num", type=int, default=1000,
                     help="Number of iterations to write status log.")
-parser.add_argument("--eval_epoch_num", type=int, default=1000,
+parser.add_argument("--eval_epoch_num", type=int, default=1000, 
                     help="Number of epochs to evaluate current model")
+parser.add_argument("--gpu_id", type=int, default=5, help="ID of GPU to use.")
+parser.add_argument("--random_seed", type=int, default=1993, help="Random seed of PyTorch and Numpy")
 
 # model configuration
 parser.add_argument("--disable_explicit", action="store_true", default=False,
                     help="Flag to disable the explicit channel")
 parser.add_argument("--disable_implicit", action="store_true", default=False,
                     help="Flag to disable the implicit channel")
-parser.add_argument("--disable_cf", action="store_true", default=False,
-                    help="Flag to disable the CF channel")
-parser.add_argument("--num_aspects", type=int, required=True,
-                    help="Number of close-domain aspects in total")
+parser.add_argument("--disable_cf", action="store_true", default=False, help="Flag to disable the CF channel")
+parser.add_argument("--num_aspects", type=int, required=True, help="Number of close-domain aspects in total")
 parser.add_argument("--aspemb_max_norm", type=int, default=-1,
                     help="Max norm of aspect embedding. Set -1 for None.")
-parser.add_argument("--num_user", type=int, required=True,
-                    help="Number of users.")
-parser.add_argument("--num_item", type=int, required=True,
-                    help="Number of items.")
-parser.add_argument("--mid_dim", type=int, default=128,
-                    help="Intermediate layer size of the final MLP")
-parser.add_argument("--regularization_weight", type=float,
-                    help="Regularization weight of the model")
+parser.add_argument("--num_user", type=int, required=True, help="Number of users.")
+parser.add_argument("--num_item", type=int, required=True, help="Number of items.")
+parser.add_argument("--mid_dim", type=int, default=128, help="Intermediate layer size of the final MLP")
+parser.add_argument("--regularization_weight", type=float, help="Regularization weight of the model")
 
 # save model configeration
 parser.add_argument("--save_model", action="store_true", default=False,
@@ -109,6 +102,9 @@ def get_optimizer(model):
 
 def train(model, dataloader):
 
+    logging.info("[info] start training ID:[{}]".format(args.experimentID))
+    print("[train] started training, ID:{}".format(args.experimentID))
+
     # optimizer
     optimizer = get_optimizer(model)
 
@@ -117,12 +113,15 @@ def train(model, dataloader):
 
     # if True, load model and continue to train
     if args.load_model:
+        print("[train] loading model from {}".format(args.load_model_path))
         model.load_state_dict(torch.load(args.load_model_path))
     total_num_iter = 0
+
+    if args.task == "both":
+        test_iter = dataloader.get_batch_iterator(for_train=False)
     
     for ep in args.num_epoch:
         trn_iter = dataloader.get_batch_iterator()
-        test_iter = dataloader.get_batch_iterator(for_train=False)
         model.train()  # model training flag
 
         total_loss = 0
@@ -130,17 +129,24 @@ def train(model, dataloader):
             total_num_iter += 1
             idx = batch.batch_idx
             # TODO: change everything to good shape
+
+            # make pred
             pred = model(batch)
-            target = torch.tensor(batch.rtg, dtype=torch.float) 
+
+            # get ground truth
+            target = torch.from_numpy(batch.rtg)
+
+            # clean out existing gradients
+            optimizer.zero_grad()
 
             # build loss term
             loss = criterion(pred, target)
 
-            total_loss += loss.item()
-
             # optimization
             loss.backward()
             optimizer.step()
+
+            total_loss += loss.item()
 
             # save model
             if args.save_model and not total_num_iter % args.save_model_iter_num:
@@ -148,24 +154,28 @@ def train(model, dataloader):
                     args.experimentID, ep, total_num_iter)
                 torch.save(model.state_dict(), path=args.save_model_path+"/"+model_name)
                 logging.info("[save] saving model: {}".format(model_name))
+                print("{} saving {}".format(get_time(), model_name))
                 
             # log model
             if idx and not idx % args.total_num_iter:
                 msg = "ep:[{}] iter:[{}/{}] loss:[{:.6f}]".format(
                     ep, idx, total_num_iter, loss.item())
                 logging.info("[perf]-iter " + msg)
+                print("{} perf-it {}".format(get_time(), msg))
                 
         # avg loss this ep
         # TODO: add print to all logging places
         msg = "ep:[{}] iter:[{}] avgloss:[{:.6f}]".format(
             ep, total_num_iter, total_loss / trn_iter.get_train_batch_num())
         logging.info("[perf]-ep " + msg)
+        print("{} perf-ep {}".format(get_time(), msg))
         
         # run test
         if not ep % args.eval_epoch_num and args.task == "both":
             test_mse = evaluate(model, test_iter, rooted=False)
             msg = "ep:[{}] mse:[{}]".format(ep, test_mse)
-            logging.info("[test] ep:[{}] mse:[{}]".format(ep, test_mse))
+            logging.info("[test] {}".format(msg))
+            print("{} perf-test {}".format(get_time(), msg))
 
 
 def evaluate(model, test_dl, rooted=False, restore_model_path=None):
@@ -201,11 +211,26 @@ if __name__ == "__main__":
         format='[%(asctime)s][%(levelname)s][%(filename)s] %(message)s', 
         datefmt='%m/%d/%Y %H:%M:%S')
     
+    # setup gpu
+    if torch.cuda.device_count() > 0:
+        assert torch.cuda.device_count() > args.gpu_id
+        torch.cuda.set_device("cuda:"+str(args.gpu_id))
+        msg = "[cuda] with {} gpus, using cuda:{}".format(
+            torch.cuda_device_count(), args.gpu_id)
+    else:
+        msg = "[cuda] no gpus, using cpu"
+    
+    logging.info(msg)
+    print("{} {}".format(get_time(), msg))
     # set random seeds
-    torch.manual_seed(1993)
-    np.random.seed(1993)
+    torch.manual_seed(args.random_seed)
+    np.random.seed(args.random_seed)
 
     model = APRE(args)
+
+    # move model to cuda device
+    if torch.cuda.is_available():
+        model = model.cuda()
 
     dataloader = DataLoader(dataset=args.dataset, shuffle=args.shuffle,
         batch_size=args.batch_size)
@@ -217,3 +242,8 @@ if __name__ == "__main__":
             restore_model_path=args.load_model_path)
     else:
         raise ValueError("args.task must in `train`, `test`, or `both`")
+
+
+def get_time():
+    time = datetime.now().isoformat()[:24]
+    return time

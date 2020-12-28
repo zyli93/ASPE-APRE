@@ -41,15 +41,9 @@ class APRE(nn.Module):
         self.num_asp = args.num_aspects
         self.bert_dim = 768
 
-        # set device
-        if torch.cuda.device_count() > 0:
-            self.device = torch.device('cuda:0')
-        else:
-            self.device = torch.device('cpu')
-
         # Whether the model returns all hidden-states.
         self.bert = BertModel.from_pretrained('bert-base-uncased', output_hidden_states=True)
-        
+
         # =========================
         #   Aspect related
         # =========================
@@ -173,11 +167,9 @@ class APRE(nn.Module):
             # after : (ttl_nrev) * num_asp * pad_len
             # _rev: EntityReviewAggregation
             urevs_loc = torch.tensor(np.concatenate(
-                [x.toarray() for _rev in batch.urev for x in _rev.get_anno_tkn_revs[1]], 
-                axis=0), device=self.device)
+                [x.toarray() for _rev in batch.urev for x in _rev.get_anno_tkn_revs()[1]], axis=0))
             irevs_loc = torch.tensor(np.concatenate(
-                [x.toarray() for _rev in batch.irev for x in _rev.get_anno_tkn_revs[1]], 
-                axis=0), device=self.device)
+                [x.toarray() for _rev in batch.irev for x in _rev.get_anno_tkn_revs()[1]], axis=0))
 
             # user/item representation
             uasp_repr = torch.matmul(urevs_loc, ull_out)  # ttl_nrev, num_asp, 768
@@ -259,7 +251,9 @@ class APRE(nn.Module):
         #   Merge three channel
         # ======================
         # first three terms: (bs, 1), (bs, 1), (bs, 1)
-        pred = self.b_u[batch.uid] + self.b_t[batch.iid] + self.im_mlp(torch.cat(u_impl_repr, i_impl_repr))
+        # create tensor for them
+        batch_uid, batch_iid = torch.from_numpy(batch.users), torch.from_numpy(batch.items)
+        pred = self.b_u[batch_uid] + self.b_t[batch_iid] + self.im_mlp(torch.cat(u_impl_repr, i_impl_repr))
         pred = pred.squeeze()  # (bs)
 
         # (bs, num_asp, 2*768) -> (bs, num_asp, 1) -> (bs, num_asp)

@@ -12,6 +12,7 @@
 import logging
 from random import shuffle
 import pandas as pd
+import numpy as np
 from easydict import EasyDict as edict
 
 from utils import load_pkl
@@ -27,7 +28,9 @@ class DataLoader:
     def __init__(self,
                  dataset,
                  shuffle=True,
-                 batch_size=128
+                 batch_size=128,
+                 use_gpu=False,
+                 use_nbr=False
                  ):
         """initialize DataLoader
         
@@ -41,11 +44,13 @@ class DataLoader:
         self.shuffle_train = shuffle
         self.bs = batch_size
         self.recurrent_iteration = False
+        self.use_gpu = use_gpu
+        self.use_neighbor = use_nbr
 
         self.user_rev, self.item_rev = None, None
         self.user_nbr, self.item_nbr = None, None
         self.__load_info_data()
-        
+
         self.train_data = None
         self.train_instances = None
         self.train_batch_num, self.test_batch_num = 0, 0
@@ -74,8 +79,10 @@ class DataLoader:
         """
         print("[DataLoader] initialize, load datasets ...")
         
-        print("[DataLoader] loading user/item nbrs ...")
-        self.user_nbr, self.item_nbr = self.__load_user_item_nbr()
+        # TODO: neighbor not showing up on cuda might be another problem
+        if self.use_neighbor:
+            print("[DataLoader] loading user/item nbrs ...")
+            self.user_nbr, self.item_nbr = self.__load_user_item_nbr()
 
         print("[DataLoader] loading user/item reviews ...")
         self.user_rev, self.item_rev = self.__load_user_item_reviews()
@@ -139,23 +146,35 @@ class DataLoader:
             instances = data_instances[i * bs, end_idx]
             
             # get user/item ids
-            users = [ins.user_id for ins in instances]
-            items = [ins.item_id for ins in instances]
-            ratings = [ins.rating for ins in instances]
+            users = np.array([ins.user_id for ins in instances])
+            items = np.array([ins.item_id for ins in instances])
+            ratings = np.array([ins.rating for ins in instances])
 
             # get user/item neighbors
-            user_nbrs = [self.user_nbr[ins.user_id] for ins in instances]
-            item_nbrs = [self.item_nbr[ins.item_id] for ins in instances]
+            if self.use_neighbor:
+                user_nbrs = [self.user_nbr[ins.user_id] for ins in instances]
+                item_nbrs = [self.item_nbr[ins.item_id] for ins in instances]
+            else:
+                user_nbrs, item_nbrs = None, None
 
             # get user/item reviews
             user_revs = [self.user_rev[ins.user_id] for ins in instances]
             item_revs = [self.item_rev[ins.item_id] for ins in instances]
 
-            yield edict({"batch_idx": i,
-                         "uid": users, "iid": items,
-                         "unbr": user_nbrs, "inbr": item_nbrs,
-                         "urev": user_revs, "irev": item_revs,
-                         "rtg": ratings})
+            # move to devices
+            if self.use_gpu:
+                self.__move_rev_to_device(user_revs)
+                self.__move_rev_to_device(item_revs)
+
+            batch = edict({"batch_idx": i,
+                           "uid": users, "iid": items,
+                           "unbr": user_nbrs, "inbr": item_nbrs,
+                           "urev": user_revs, "irev": item_revs,
+                           "rtg": ratings})
+            if self.use_gpu:
+                self.__move_rev_to_device(batch)
+            
+            yield batch
     
     def __shuffle_train_data(self):
         if self.shuffle_train:
@@ -166,3 +185,11 @@ class DataLoader:
 
     def get_test_batch_num(self):
         return self.test_batch_num
+    
+    def __move_rev_to_device(self, batch):
+        for rev_list in [batch.urev, batch.irev]:
+            for _rev in rev_list:
+                tkn, _ = _rev.get_anno_tkn_revs()
+                tkn['input_ids'] = tkn['input_ids'].cuda()
+                tkn['attention_mask'] = tkn['attention_mask'].cuda()
+                _rev.set_anno_tkn_revs(tkn)

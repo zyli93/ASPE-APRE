@@ -172,3 +172,16 @@
     # item_anno_reviews = dict(item_anno_reviews)
 
     # return user_anno_reviews, item_anno_reviews
+
+
+    # ===== code for merge aspects =====
+            #     # repeat ll_uout, ll_iout to (ttl_nrev, num_asp, pl, 768)
+            # ll_uout_rep = ll_uout.unsqueeze(1).repeat(1, self.num_asp, 1, 1)\
+            #     .permute(3, 0, 1, 2)  # 768, ttl_nrev, num_asp, pl
+            # ll_uout_rep = torch.permute(3, 0, 1, 2)
+            # ll_iout_rep = ll_iout.unsqueeze(1).repeat(1, self.num_asp, 1, 1)
+    
+                # method 2
+                # uasp_repr_agg.append(
+                #     torch.mul(uasp_repr_spl[i], self.emb_aspect)
+                #     F.softmax(uasp_repr_spl[i], dim=1)

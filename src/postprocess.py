@@ -64,7 +64,7 @@ parser.add_argument(
     help="Number of multithread workers")
 
 parser.add_argument(
-    '--num_last_layers",
+    '--num_last_layers',
     type=int,
     default=4,
     help="Number of last layers of BERT fed downstream")
@@ -136,7 +136,18 @@ class EntityReviewAggregation:
         return self.reviews
     
     def get_anno_tkn_revs(self):
+        """
+        Get annotated tokenized reviews
+
+        Return:
+            self.tokenized_revs - PyTorch style tokenization. 
+                Two fields: `input_ids`, `attention_mask`
+            self.revs_asp_mention_locs - list of sp matrixs
+        """
         return self.tokenized_revs, self.revs_asp_mention_locs
+    
+    def set_anno_tkn_revs(new_anno_tkn_revs):
+        self.tokenized_revs = new_tokenized_revs
     
     def get_rev_size(self):
         return self.tokenized_revs['input_ids'].shape[0]
