@@ -18,6 +18,7 @@ Rating prediction with Unsupervised Aspect-level Review Analysis (RUARA)
 - [x] add notes for deleting RB and using JJ only
 - [x] add gensim with glove embedding
 - [x] use higher dimension of glove
+- [ ] add `get_prereq_ready.sh` instructions
 
 ## Data and External Resources
 

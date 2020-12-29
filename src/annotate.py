@@ -9,6 +9,7 @@ import sys
 import argparse
 import ujson as json
 import re
+import time
 from collections import Counter
 from itertools import permutations
 from itertools import chain
@@ -133,14 +134,11 @@ def compute_pmi(args, df):
     print("Done!")
     print("\t[Annotate] PMI matrix and vocabulary saved in {}".format(args.path))
 
-    # TODO: to delete dump_pkl later after verification
-    dump_pkl("./temp/pmi.pkl", pmi)  # TODO: how to verify this is correct?
+    dump_pkl(args.path + "/pij.pkl", p_ij)
+    dump_pkl(args.path + "/pi.pkl", p_i)
 
-    dump_pkl("./temp/pij.pkl", p_ij)
-    dump_pkl("./temp/pi.pkl", p_i)
-
-    dump_pkl("./temp/single_counter.pkl", single_counter)
-    dump_pkl("./temp/pair_counter.pkl", pair_counter)
+    dump_pkl(args.path + "/pmi_single_counter.pkl", single_counter)
+    dump_pkl(args.path + "/pmi_pair_counter.pkl", pair_counter)
 
     return pmi, pmi_vocabs
 
@@ -295,8 +293,10 @@ def filter_senti_terms_by_glove(args, df):
     pos_seeds, neg_seeds = glove_seeds['POS'], glove_seeds['NEG']
 
     def avg_similarity_to_seeds(target, seeds):
-        return sum([glove.similarity(target, seed) 
-                    for seed in seeds]) / len(seeds)
+        # using try-except clause to avoid word not in glove vocab
+        sum_sim = sum([glove.similarity(target, seed) 
+                for seed in seeds]) / len(seeds)
+        return sum_sim
     
     def get_terms_in_polarity(iter_, senti_terms, func):
         while len(senti_terms) < args.num_senti_terms_per_pol:
@@ -306,15 +306,19 @@ def filter_senti_terms_by_glove(args, df):
                 print("\tStopped early. Unable to get {} terms.".format(
                     args.num_senti_terms_per_pol))
                 break
-            pos_sim = avg_similarity_to_seeds(t, pos_seeds)
-            neg_sim = avg_similarity_to_seeds(t, neg_seeds)
-            score = 2 * (pos_sim - neg_sim) / (pos_sim + neg_sim)
+            if t in glove.vocab:
+                pos_sim = avg_similarity_to_seeds(t, pos_seeds)
+                neg_sim = avg_similarity_to_seeds(t, neg_seeds)
+                score = 2 * (pos_sim - neg_sim) / (pos_sim + neg_sim)
+            else:
+                score = 0
+
             if func(score):
                 senti_terms.append(t)
 
     # load GloVe vectors
     print("\t[Annotate] loading GloVe {}-d".format(args.glove_dimension))
-    glove = glove = KeyedVectors.load_word2vec_format(
+    glove = KeyedVectors.load_word2vec_format(
         "./glove/glove.6B.{}d.word2vec_format.txt".format(args.glove_dimension))
     print("\t[Annotate] loading GloVe done!")
     
@@ -398,41 +402,41 @@ def get_sentiment_terms(args):
     # ===============================
     #   Mine Sentiment words by PMI
     # ===============================
-    ''' # remove later
     # check args.path
     if not os.path.exists(args.path):
         raise ValueError("Invalid path {}".format(args.path))
     if args.path[-1] == "\/":
         args.path = args.path[:-1]
 
-    # load config files
-    pmi_seeds = load_pmi_seed_words()
-    train_df = load_train_file(path=args.path)
-    postag_filters = load_postag_filters(args)
+    if args.do_compute_pmi:
+        # load config files
+        pmi_seeds = load_pmi_seed_words()
+        train_df = load_train_file(path=args.path)
+        postag_filters = load_postag_filters(args)
 
-    # compute PMI and POS tag
-    pmi_matrix, pmi_vocab = compute_pmi(args, train_df)
-    word_to_postag = get_vocab_postags(args, train_df, pmi_vocab)
+        # compute PMI and POS tag
+        pmi_matrix, pmi_vocab = compute_pmi(args, train_df)
+        word_to_postag = get_vocab_postags(args, train_df, pmi_vocab)
 
-    # generate opinion words
-    word_pol_df = compute_vocab_polarity_from_seeds(
-        args,
-        seeds=pmi_seeds,
-        postag_filters=postag_filters['keep'],
-        vocab_postags=word_to_postag,
-        pmi_matrix=pmi_matrix)
-    ''' # remove later
+        # generate opinion words
+        word_pol_df = compute_vocab_polarity_from_seeds(
+            args,
+            seeds=pmi_seeds,
+            postag_filters=postag_filters['keep'],
+            vocab_postags=word_to_postag,
+            pmi_matrix=pmi_matrix)
 
-    word_pol_df = pd.read_csv(args.path + "/cand_senti_pol.csv")  # delete later
-    
-    # get pmi sentiment word terms
-    pos_senti_terms, neg_senti_terms = filter_senti_terms_by_glove(args, word_pol_df)
-    pmi_senti_terms = set(pos_senti_terms).union(set(neg_senti_terms))
+        # get pmi sentiment word terms
+        pos_senti_terms, neg_senti_terms = filter_senti_terms_by_glove(args, word_pol_df)
+        pmi_senti_terms = set(pos_senti_terms).union(set(neg_senti_terms))
 
-    # save pmi sentiment word terms
-    print("\t[Annotate] savimg pmi sentiment terms to {}/pmi_senti_terms.pkl"
-            .format(args.path))
-    dump_pkl(args.path + "/pmi_senti_terms.pkl", pmi_senti_terms)
+        # save pmi sentiment word terms
+        print("\t[Annotate] savimg pmi sentiment terms to {}/pmi_senti_terms.pkl"
+                .format(args.path))
+        dump_pkl(args.path + "/pmi_senti_terms.pkl", pmi_senti_terms)
+    else:
+        print("\t[Annotate] loading pmi terms instead of computing")
+        pmi_senti_terms = load_pkl(args.path+"/pmi_senti_terms.pkl")
 
     # ===============================
     #   Parse SDRN output
@@ -445,7 +449,7 @@ def get_sentiment_terms(args):
                 "sdrn": sdrn_senti_terms}
 
     # ===============================
-    #   (Optional) SentiWordTable
+    #   SentiWordTable
     # ===============================
 
     senti_wl_terms = load_senti_wordlist_terms(args)
@@ -501,9 +505,10 @@ def get_aspect_senti_pairs(args, senti_term_set):
         s = row['original_text']
         sentences = sent_tokenize(s)
         doc_list = [_ for _ in nlp.pipe(sentences, disable=['tagger', 'ner'])]
-        # TODO: finish here!
         for doc in doc_list:
             aspairs = extract_aspair_deptree_spacy(doc)
+
+            # below commented because parallel computing can't pickup `aspairs`
             # as_pair_set doesn't work in parallel settings
             # as_pair_set.update(aspairs)  
         
@@ -515,24 +520,32 @@ def get_aspect_senti_pairs(args, senti_term_set):
 
     # processing original text
     nlp = spacy.load("en_core_web_sm")
-    as_pair_set = set()
 
     # changing process to process_complex, returning two 
     if not args.multi_proc_dep_parsing:
         tqdm.pandas()  # use tqdm pandas to enable progress bar for `progress_apply`.
         train_df[COL_DEP_DOC, COL_AS_PAIRS] = train_df.progress_apply(
-            process, axis=1, result_type="expand")
+            process_complex, axis=1, result_type="expand")
     else:
         print("\t[Annotate] Using parallel dep parsing. " + 
               "Spinning off {} parallel workers ...".format(args.num_workers_mp_dep))
         pandarallel.initialize(
             nb_workers=args.num_workers_mp_dep,
             progress_bar=True,
-            verbose=1)
+            verbose=1,
+            use_memory_fs=False)
         train_df[[COL_DEP_DOC, COL_AS_PAIRS]] = train_df.parallel_apply(
             process, axis=1, result_type="expand")
         # parallel setting cannot handle as_pair_set as apply does. 
-        as_pair_set = set(list(chain.from_iterable(train_df[COL_AS_PAIRS])))
+        
+        # as pair return counter
+    as_pair_set = set(list(chain.from_iterable(train_df[COL_AS_PAIRS])))
+    as_pair_cnt = Counter(list(chain.from_iterable(train_df[COL_AS_PAIRS])))
+
+    # save things
+    print("[Annotate] saving extracted aspect sentiment pairs ...")
+    dump_pkl(path=args.path + "/as_pairs.pkl", obj=as_pair_set)
+    dump_pkl(path=args.path + "/as_pairs_counter.pkl", obj=as_pair_cnt)
 
     # save the processed train_df for later use.
     print("\t[Annotate] saving processed dataframe to {}/train_data+dep.pkl"
@@ -554,11 +567,7 @@ def main(args):
     print("\tfinal set size: {}".format(len(term_set)))
 
     print("[Annotate] getting aspect sentiment pairs ...")
-    as_pairs = get_aspect_senti_pairs(args, term_set)
-
-    # save things
-    print("[Annotate] saving extracted aspect sentiment pairs ...")
-    dump_pkl(path=args.path + "/as_pairs.pkl", obj=as_pairs)
+    get_aspect_senti_pairs(args, term_set)
 
     print("[Annotate] Annotate all done!!!")
 
@@ -618,6 +627,12 @@ if __name__ == "__main__":
         type=int,
         default=8,
         help="Number of workers to be spinned off for multiproc dep parsing.")
+    
+    parser.add_argument(
+        "--do_compute_pmi",
+        action="store_true",
+        default=False,
+        help="Whether to redo pmi computation")
 
     args = parser.parse_args()
     main(args)

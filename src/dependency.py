@@ -60,13 +60,13 @@ def extract_aspair_deptree_spacy(doc):
         # add amod
         if tok.dep == amod:
             # head token (htok) -> aspect
-            print("tok", tok)
-            print("tok.dep", tok.dep_)
+            # print("tok", tok)
+            # print("tok.dep", tok.dep_)
             htok = tok.head
 
             # first aspect token
             tok_asp = merge_compound_token(htok)
-            print("htok and merge compound htok", htok, tok_asp)
+            # print("htok and merge compound htok", htok, tok_asp)
             aspairs.append((tok_asp, tok.text))
 
             # mine tok_asp's conj in str
