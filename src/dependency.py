@@ -74,11 +74,11 @@ def extract_aspair_deptree_spacy(doc):
 
             # update aspect-sentiment pairs
             if conj_asp:
-                aspairs.append([conj_asp, tok.text])
+                aspairs.append((conj_asp, tok.text))
             
             conj_senti = find_conj_token(tok)
             if conj_senti:
-                aspairs.append([htok.text, conj_senti])
+                aspairs.append((htok.text, conj_senti))
 
 
         # process acomp

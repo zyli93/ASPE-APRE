@@ -505,8 +505,11 @@ def get_aspect_senti_pairs(args, senti_term_set):
         s = row['original_text']
         sentences = sent_tokenize(s)
         doc_list = [_ for _ in nlp.pipe(sentences, disable=['tagger', 'ner'])]
+        aspairs = []
         for doc in doc_list:
-            aspairs = extract_aspair_deptree_spacy(doc)
+            doc_aspairs = extract_aspair_deptree_spacy(doc)
+            doc_aspairs = [p for p in doc_aspairs if p[1] in senti_term_set]
+            aspairs += doc_aspairs
 
             # below commented because parallel computing can't pickup `aspairs`
             # as_pair_set doesn't work in parallel settings
@@ -524,7 +527,7 @@ def get_aspect_senti_pairs(args, senti_term_set):
     # changing process to process_complex, returning two 
     if not args.multi_proc_dep_parsing:
         tqdm.pandas()  # use tqdm pandas to enable progress bar for `progress_apply`.
-        train_df[COL_DEP_DOC, COL_AS_PAIRS] = train_df.progress_apply(
+        train_df[[COL_DEP_DOC, COL_AS_PAIRS]] = train_df.progress_apply(
             process_complex, axis=1, result_type="expand")
     else:
         print("\t[Annotate] Using parallel dep parsing. " + 
@@ -538,7 +541,12 @@ def get_aspect_senti_pairs(args, senti_term_set):
             process, axis=1, result_type="expand")
         # parallel setting cannot handle as_pair_set as apply does. 
         
-        # as pair return counter
+    # save the processed train_df for later use.
+    print("\t[Annotate] saving processed dataframe to {}/train_data_dep.pkl"
+            .format(args.path))
+    train_df.to_pickle(args.path + "/train_data_dep.pkl")
+    
+    # as pair return counter
     as_pair_set = set(list(chain.from_iterable(train_df[COL_AS_PAIRS])))
     as_pair_cnt = Counter(list(chain.from_iterable(train_df[COL_AS_PAIRS])))
 
@@ -547,10 +555,6 @@ def get_aspect_senti_pairs(args, senti_term_set):
     dump_pkl(path=args.path + "/as_pairs.pkl", obj=as_pair_set)
     dump_pkl(path=args.path + "/as_pairs_counter.pkl", obj=as_pair_cnt)
 
-    # save the processed train_df for later use.
-    print("\t[Annotate] saving processed dataframe to {}/train_data+dep.pkl"
-            .format(args.path))
-    train_df.to_pickle(args.path + "/train_data_dep.pkl")
 
     return as_pair_set
 
