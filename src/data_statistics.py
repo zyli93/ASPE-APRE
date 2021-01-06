@@ -31,6 +31,9 @@ def sent_per_review(df):
 def review_per_user(df):
     return df.groupby('user_id')['item_id'].count()
 
+def review_per_item(df):
+    return df.groupby('item_id')['user_id'].count()
+
 def sent_length(df):
     def sent_len(text):
         sents = sent_tokenize(text)
@@ -51,18 +54,22 @@ if __name__ == "__main__":
         print("loading {}".format(name))
         df = load_df(name)
 
-        print("review per user")
-        rpu = review_per_user(df)
+        # print("review per user")
+        # rpu = review_per_user(df)
 
-        print("word per view")
-        df = word_per_review(df)
+        print("review per item")
+        rpt = review_per_item(df)
+
+        # print("word per view")
+        # df = word_per_review(df)
  
-        print("sent per review")
-        df = sent_per_review(df)
+        # print("sent per review")
+        # df = sent_per_review(df)
 
-        print("Dataset {}".format(name))
-        total_words = df.word_count.sum()
-        print("total words = {}".format(total_words))
-        print("review/user = {}".format(rpu.sum() / len(rpu)))
-        print("words/review = {}".format(df.word_count.mean()))
-        print("sents/review = {}".format(df.sent_count.mean()))
+        # print("Dataset {}".format(name))
+        # total_words = df.word_count.sum()
+        # print("total words = {}".format(total_words))
+        # print("review/user = {}".format(rpu.sum() / len(rpu)))
+        print("review/user = {}".format(rpt.sum() / len(rpt)))
+        # print("words/review = {}".format(df.word_count.mean()))
+        # print("sents/review = {}".format(df.sent_count.mean()))

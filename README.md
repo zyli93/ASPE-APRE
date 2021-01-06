@@ -89,39 +89,32 @@ python src/preprocessing.py -h
 
 Detailed instruction for each flag
 ```text
-usage: preprocess.py [-h] --dataset DATASET
-                     [--test_split_ratio TEST_SPLIT_RATIO] [--k_core K_CORE]
-                     [--min_review_len MIN_REVIEW_LEN]
-                     [--amazon_subset AMAZON_SUBSET]
-                     [--yelp_min_cat_num YELP_MIN_CAT_NUM]
-                     [--yelp_city YELP_CITY]
+usage: preprocess.py [-h] [--test_split_ratio TEST_SPLIT_RATIO]
+                     [--k_core K_CORE] [--min_review_len MIN_REVIEW_LEN]
+                     [--use_spell_check] [--amazon_subset AMAZON_SUBSET]
 
 optional arguments:
   -h, --help            show this help message and exit
-  --dataset DATASET     Dataset: yelp, amazon, goodreads
   --test_split_ratio TEST_SPLIT_RATIO
-                        Ratio of test split to main dataset. Default=0.05.
+                        Ratio of test split to main dataset. Default=0.1.
   --k_core K_CORE       The number of cores of the dataset. Default=5.
   --min_review_len MIN_REVIEW_LEN
-                        Minimum length of the reviews. Default=20.
+                        Minimum num of words of the reviews. Default=5.
+  --use_spell_check     Whether to use spell check and correction. Turning
+                        this on will SLOW DOWN the process.
   --amazon_subset AMAZON_SUBSET
-                        [Amazon-only] Subset name of Amazon dataset
-  --yelp_min_cat_num YELP_MIN_CAT_NUM
-                        [Yelp-only] Minimum number of category labels in the
-                        filter set. Default=2.
-  --yelp_city YELP_CITY
-                        [Yelp-only] Subset city of Yelp dataset
+                        [Amazon-only] Subset name of Amazon datasett
 ```
 
 Here's an example for parsing the _Digital Music_ dataset for Amazon.
 ```
-python src/preprocess.py --dataset=amazon --amazon_subset=digital_music
+python src/preprocess.py --amazon_subset=digital_music
 ```
 
 **Note**: We noticed that there exist words which are misspelled and can damage the PMI for aspect words. 
 
 ### Prepare for NN-based and Lexicon-based extraction
-
+**TODO**
 
 
 ### Unsupervised aspect annotation
@@ -212,6 +205,43 @@ Most important results `annotate.py` generates:
 
 
 ### Aspect-sentiment term co-extraction
+We use `extract.py` to filter useful aspects and convert aspects to index.
+
+
+
+### Prepare for Training
+We use `postprocess.py` to prepare the data for training. We understand some work can be done ahead of time so that it can save sometime. Especially for finding the locations of the sentiment terms.
+```
+usage: postprocess.py [-h] --data_path DATA_PATH --num_aspects NUM_ASPECTS
+                      [--max_pad_length MAX_PAD_LENGTH]
+                      [--num_workers NUM_WORKERS] [--build_nbr_graph]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --data_path DATA_PATH
+                        Path to the dataset.
+  --num_aspects NUM_ASPECTS
+                        Number of aspect categories in total
+  --max_pad_length MAX_PAD_LENGTH
+                        Max length of padding. Default=100.
+  --num_workers NUM_WORKERS
+                        Number of multithread workers
+  --build_nbr_graph     Whether to build neighborhood graph.
+```
+Number of aspects will be printed from `extract.py`. An example for digital music is 
+```
+python src/postprocess.py --data_path=./data/amazon/digital_music --num_aspects 604 
+```
+digital_music: 604
+vig (count threshold 200, 85866, 1311)
+hok (count threshold 200, 83305, 1253)
+pes (count threshold 100, 20246, 705)
+    (count threshold 50, 23328, 1110)
+ofp (count threshold 100, 54795, 1257)
+
+
+
+### Training
 
 ### Aspect and Opinion Extractor with ML models
 

@@ -11,6 +11,10 @@
     Date Created: 12/07/2020
     Date Last Modified: TODO
     Python Version: 3.6
+
+    Today I learned:
+        1. csv is only suitable for non-object saving
+        2. 
 '''
 
 import sys
@@ -20,6 +24,7 @@ import argparse
 from collections import defaultdict
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
 from nltk.tokenize import sent_tokenize
 from scipy.sparse import csr_matrix
@@ -28,12 +33,12 @@ from pandarallel import pandarallel
 
 import torch
 
-from graph import build_graph
 from utils import dump_pkl
 
-COL_REV_TEXT = "original_text"  # TODO: fix this
-COL_ASPAIRS = "as_pairs"
-COL_ANNO_REV = "annotated_review"
+from extract import COL_AS_PAIRS_IDX
+
+COL_REV_TEXT = "original_text"
+COL_ASPAIRS = COL_AS_PAIRS_IDX
 
 # Arguments parser
 parser = argparse.ArgumentParser()
@@ -64,10 +69,10 @@ parser.add_argument(
     help="Number of multithread workers")
 
 parser.add_argument(
-    '--num_last_layers',
-    type=int,
-    default=4,
-    help="Number of last layers of BERT fed downstream")
+    "--build_nbr_graph",
+    action="store_true",
+    default=False,
+    help="Whether to build neighborhood graph.")
 
 args = parser.parse_args()
 
@@ -83,6 +88,8 @@ class EntityReviewAggregation:
             self.reviews - (list[str]) list of text review
             self.reviews_count - (int) number of reviews
         """
+        reviews = reviews.tolist()
+        aspairs = aspairs.tolist() 
         # test sizes of reviews and aspairs
         if len(reviews) != len(aspairs):
             raise ValueError("Reviews and Aspairs sizes don't match!")
@@ -93,7 +100,7 @@ class EntityReviewAggregation:
         self.pad_len = pad_len
         self.num_asp = num_asp
         self.reviews = reviews
-        
+
         # create tokenizer
         tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased")
 
@@ -146,8 +153,8 @@ class EntityReviewAggregation:
         """
         return self.tokenized_revs, self.revs_asp_mention_locs
     
-    def set_anno_tkn_revs(new_anno_tkn_revs):
-        self.tokenized_revs = new_tokenized_revs
+    def set_anno_tkn_revs(self, new_anno_tkn_revs):
+        self.tokenized_revs = new_anno_tkn_revs
     
     def get_rev_size(self):
         return self.tokenized_revs['input_ids'].shape[0]
@@ -165,7 +172,7 @@ class EntityReviewAggregation:
             dim=1)
 
 
-def agg_tokenized_data(df):
+def agg_tokenized_data(df, n_partition=5):
     """from annotation to user/item annotations
     
     Args:
@@ -175,19 +182,52 @@ def agg_tokenized_data(df):
             and aspect locations aggregated by users
         item_revs - same but aggregated by items
     """
+
+    def merge_dict(dict1, dict2):
+        return (dict2.update(dict1))
+
     def process(row):
         return EntityReviewAggregation(
-            reviews=row.original_text, aspairs=row.aspairs,
+            reviews=row.original_text, aspairs=row[COL_ASPAIRS],
             pad_len=args.max_pad_length, num_asp=args.num_aspects)
 
     if not all([x in df.columns for x in [COL_REV_TEXT, COL_ASPAIRS]]):
         raise KeyError("Missing a column from review text and aspairs")
 
-    pandarallel.initialize(nb_workers=args.num_workers, progress_bar=True)
-
+    pandarallel.initialize(nb_workers=args.num_workers, progress_bar=True,
+        use_memory_fs=False)
+    
+    revs_to_return = []
     # groupby users
-    user_revs = df.groupby('user_id').parallel_apply(process)
-    item_revs = df.groupby('item_id').parallel_apply(process)
+    useful_cols = ["original_text", COL_ASPAIRS]
+    for task in ['user_id', 'item_id']:
+        print("task {}".format(task))
+        uniq_ids = list(df[task])
+        partition_ids = defaultdict(list)
+        result_revs_list = []
+        for id_ in uniq_ids:
+            partition_ids[int(id_[2:]) % n_partition].append(id_)
+        
+        for partition in partition_ids.keys():
+            print("partition {}".format(partition))
+            sub_df = df[df[task].isin(partition_ids[partition])]
+            # sub_revs = sub_df.groupby(task)[useful_cols].progress_apply(process)
+            sub_revs = sub_df.groupby(task)[useful_cols].parallel_apply(process)
+            # result_revs_list.append(dict(sub_revs))
+            dump_pkl("./temp/p{}_{}".format(partition, task), dict(sub_revs))
+        
+        result_revs = dict()
+        for _revs in result_revs_list:
+            result_revs = merge_dict(result_revs, _revs)
+        revs_to_return.append(result_revs)
+
+        
+    # user_revs = df.groupby('user_id')[useful_cols].progress_apply(process)
+    # item_revs = df.groupby('item_id')[useful_cols].progress_apply(process)
+
+    # old code
+    # user_revs = df.groupby('user_id')[useful_cols].parallel_apply(process)
+    # item_revs = df.groupby('item_id')[useful_cols].parallel_apply(process)
 
     # convert to dict
     return dict(user_revs), dict(item_revs)
@@ -213,10 +253,12 @@ def main():
 
     # load dataframe
     # TODO: put in the correct csv file of train data with aspairs
-    df = pd.read_csv(args.data_path + "train_data.csv")
+    # df = pd.read_csv(args.data_path + "train_data_aspairs.csv")
+    df = pd.read_pickle(args.data_path + "train_data_aspairs.pkl")
 
     print("[postprocess] processing user/item annotation reviews ...")
     user_anno_tkn_rev, item_anno_tkn_rev= agg_tokenized_data(df)
+
     dump_pkl(args.data_path + "user_anno_tkn_revs.pkl", user_anno_tkn_rev)
     dump_pkl(args.data_path + "item_anno_tkn_revs.pkl", item_anno_tkn_rev)
 
@@ -224,10 +266,12 @@ def main():
     # Part II - user/item graph
     # =====================
 
-    print("[postprocess] processing user/item neighbor data ...")
-    user_nbr, item_nbr = build_graph(path=args.data_path)
-    dump_pkl(args.data_path + "user_nbr_item.pkl", user_nbr)
-    dump_pkl(args.data_path + "item_nbr_user.pkl", item_nbr)
+    if args.build_nbr_graph:
+        from graph import build_graph
+        print("[postprocess] processing user/item neighbor data ...")
+        user_nbr, item_nbr = build_graph(path=args.data_path)
+        dump_pkl(args.data_path + "user_nbr_item.pkl", user_nbr)
+        dump_pkl(args.data_path + "item_nbr_user.pkl", item_nbr)
 
     print("[postprocess] done! Save four files `anno_tkn_revs` and `nbr`")
 

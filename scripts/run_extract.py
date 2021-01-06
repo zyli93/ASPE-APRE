@@ -1,0 +1,1 @@
+python src/extract.py --data_path=./data/amazon/video_games/ --count_threshold=50
