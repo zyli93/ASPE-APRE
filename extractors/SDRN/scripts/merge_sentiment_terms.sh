@@ -4,7 +4,8 @@
 # python src/parse_output.py 2015Res home_kitchen
 
 echo "merge sentiment terms..."
-for ds in home_kitchen  office_products  pet_supplies  sports_outdoors  video_games digital_music
+# for ds in home_kitchen  office_products  pet_supplies  sports_outdoors  video_games digital_music
+for ds in automotive
 do
     python parse_output.py merge xx $ds
 done

@@ -19,6 +19,7 @@ Rating prediction with Unsupervised Aspect-level Review Analysis (RUARA)
 - [x] add gensim with glove embedding
 - [x] use higher dimension of glove
 - [ ] add `get_prereq_ready.sh` instructions
+- [ ] for SDRN, remove `run_inference_xxx.sh` files and only keep the `run_inference.sh`.
 
 ## Data and External Resources
 
@@ -114,7 +115,7 @@ python src/preprocess.py --amazon_subset=digital_music
 **Note**: We noticed that there exist words which are misspelled and can damage the PMI for aspect words. 
 
 ### Prepare for NN-based and Lexicon-based extraction
-**TODO**
+**TODO**: fill in content
 
 
 ### Unsupervised aspect annotation
@@ -239,6 +240,18 @@ pes (count threshold 100, 20246, 705)
     (count threshold 50, 23328, 1110)
 ofp (count threshold 100, 54795, 1257)
 
+           count - #raw aspect - #aspect category
+automotive 50 - 4457 - 291
+digital_music 100 - 7499 - 296
+pet_supplies 150 - 18463 - 529
+toys_games 150 - 27562 - 680
+sports_outdoors 250 - 48738 - 747
+
+python src/extract.py --data_path=./data/amazon/automotive/ --count_threshold=50 --run_mapping
+python src/extract.py --data_path=./data/amazon/digital_music/ --count_threshold=100 --run_mapping
+python src/extract.py --data_path=./data/amazon/pet_supplies/ --count_threshold=150 --run_mapping
+python src/extract.py --data_path=./data/amazon/toys_games/ --count_threshold=150 --run_mapping
+python src/extract.py --data_path=./data/amazon/sports_outdoors/ --count_threshold=250 --run_mapping
 
 
 ### Training
@@ -295,7 +308,7 @@ We managed to run `SDRN`, a Bert-based model for aspect and sentiment co-extract
     |------|---------|---------|---------|
     |#. Ep |  5      |  10     | 8       |
   
-8. Massage our data into SDRN-compatible format and run inference (annotation). We wrote a Python script to do the work using the preprocessed Amazon data. Note that it takes a long time to run.
+8. [If trained SDRN models are **available**, start right from this step!] Massage our data into SDRN-compatible format and run inference (annotation). We wrote a Python script to do the work using the preprocessed Amazon data. Note that it takes a long time to run.
     ```bash
     [in SDRN dir]$ bash scripts/run_inference.sh
     ```
@@ -310,7 +323,12 @@ We managed to run `SDRN`, a Bert-based model for aspect and sentiment co-extract
     - head: Positive number: number of top lines of Amazon data to process; 
             Negative number: process the whole dataset.
     - gpu_id: the GPU to use.
-9. Parse the output annotation file. Please run the following command
+9. Parse the output annotation file. Please run the following command to merge sentiments extracted from the three SDRN versions.
+    ```bash
+    # Change the dataset names in this file correspondingly!
+    [in SDRN dir] $ bash scripts/parse_output.sh
+    ```
+    Details:
     ```bash
     [in SDRN dir]$ python parse_output.py [task] [training set] [annotate subset]
     ```
@@ -322,7 +340,7 @@ We managed to run `SDRN`, a Bert-based model for aspect and sentiment co-extract
     For example, `./data/anno_2014Lap_digital_music/aspect_terms.pkl` saves all aspect terms extracted by a 2014Lap-trained SDRN model for the dataset `digital_music`.
 
     For `merge`, take output from the above step and merge the sentiment terms sets. Produce results to `./data/senti_term_[subset]_merged.pkl`.
-10. Until here, the SDRN term extraction is done.
+10. Until here, the SDRN term extraction is done. The generated file can be picked up by `annotate.py`.
 
 
 #### RINANTE

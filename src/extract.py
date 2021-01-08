@@ -195,6 +195,8 @@ if __name__ == "__main__":
     parser.add_argument("--data_path", type=str, required=True, help="Path to the dataset.")
     parser.add_argument("--count_threshold", type=int, required=True, 
         help="Threshold of the count.")
+    parser.add_argument("--run_mapping", action="store_true", default=False, 
+        help="If off, only get aspairs but do not work on df. For viewing use, cheaper.")
     args = parser.parse_args()
 
     if args.data_path[-1] == "\/":
@@ -254,21 +256,22 @@ if __name__ == "__main__":
     dump_pkl(args.data_path+"/asp2aspcat.pkl", asp2aspcat)
 
 
-    # use raw aspect to filter
-    print("[filter aspects] filtering aspects")
-    data = filter_aspects(args, aspects_filters, vocab_pos)
+    if args.run_mapping:
+        # use raw aspect to filter
+        print("[filter aspects] run_mapping is True, filtering aspects")
+        data = filter_aspects(args, aspects_filters, vocab_pos)
 
-    print("[filter aspects] coverting aspect to index")
-    data = convert_aspect_to_idx(data, asp2aspcat, aspcat2idx)
+        print("[filter aspects] coverting aspect to index")
+        data = convert_aspect_to_idx(data, asp2aspcat, aspcat2idx)
 
-    data = data[["user_id", "item_id", "rating", "text", "original_text",
-        COL_AS_PAIRS_FIL, COL_AS_PAIRS_IDX]]
+        data = data[["user_id", "item_id", "rating", "text", "original_text",
+            COL_AS_PAIRS_FIL, COL_AS_PAIRS_IDX]]
 
-    print("[filter aspects] saving dataframe with filtered aspects at {}".format(
-        "train_data_aspairs.csv"))
-    
-    data.to_csv(args.data_path + "/train_data_aspairs.csv", index=False)
-    data.to_pickle(args.data_path + "/train_data_aspairs.pkl")
+        print("[filter aspects] saving dataframe with filtered aspects at {}".format(
+            "train_data_aspairs.csv"))
+        
+        data.to_csv(args.data_path + "/train_data_aspairs.csv", index=False)
+        data.to_pickle(args.data_path + "/train_data_aspairs.pkl")
 
 
 

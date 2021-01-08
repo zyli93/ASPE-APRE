@@ -44,8 +44,10 @@ def sent_length(df):
 
 
 if __name__ == "__main__":
-    names = ["video_games", "sports_outdoors", "office_products", 
-             "home_kitchen", "pet_supplies"]
+    # names = ["video_games", "sports_outdoors", "office_products", 
+            #  "home_kitchen", "pet_supplies"]
+    names = ["automotive", "sports_outdoors", "digital_music", 
+             "toys_games", "pet_supplies"]
     for name in names:
         pandarallel.initialize(
             nb_workers=16,
@@ -54,22 +56,27 @@ if __name__ == "__main__":
         print("loading {}".format(name))
         df = load_df(name)
 
-        # print("review per user")
-        # rpu = review_per_user(df)
+        n_u, n_t = df.user_id.nunique(), df.item_id.nunique()
+        n_r = df.shape[0]
+
+        print("review per user")
+        rpu = review_per_user(df)
+        rpu = rpu.sum() / n_u
 
         print("review per item")
         rpt = review_per_item(df)
+        rpt = rpt.sum() / n_t
 
-        # print("word per view")
-        # df = word_per_review(df)
+        print("word per view")
+        df = word_per_review(df)
  
-        # print("sent per review")
-        # df = sent_per_review(df)
+        print("sent per review")
+        df = sent_per_review(df)
 
-        # print("Dataset {}".format(name))
-        # total_words = df.word_count.sum()
-        # print("total words = {}".format(total_words))
-        # print("review/user = {}".format(rpu.sum() / len(rpu)))
-        print("review/user = {}".format(rpt.sum() / len(rpt)))
-        # print("words/review = {}".format(df.word_count.mean()))
-        # print("sents/review = {}".format(df.sent_count.mean()))
+        total_words = df.word_count.sum()
+
+        print("{} {} & {} & {} & {} & {} & {} & {} & {}".format(
+            name, n_r, n_u, n_t, n_r/(n_u*n_t), 
+            total_words, rpu, rpt, df.word_count.mean()
+        ))
+

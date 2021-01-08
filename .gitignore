@@ -166,3 +166,6 @@ temp/
 
 # log directory
 log/
+
+# daisyRec package
+daisyRec/
