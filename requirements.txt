@@ -19,3 +19,4 @@ pytorch_pretrained_bert
 transformers
 pandarallel
 gensim
+easydict

@@ -27,6 +27,7 @@ from lxml import etree
 from bs4 import BeautifulSoup
 from collections import Counter
 from collections import defaultdict
+from datetime import datetime
 
 from tqdm import tqdm
 
@@ -59,6 +60,14 @@ def make_dir(path):
     """helper for making dir"""
     if not os.path.exists(path):
         os.makedirs(path, exist_ok=True)
+
+def get_time():
+    time = datetime.now().isoformat()[:24]
+    return time
+
+def check_memory():
+    print('GPU memory: %.1f' % (torch.cuda.memory_allocated() // 1024 ** 2))
+
 
 # Training model helper functions
 

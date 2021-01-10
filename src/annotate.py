@@ -571,7 +571,7 @@ def main(args):
     print("\tfinal set size: {}".format(len(term_set)))
 
     print("[Annotate] getting aspect sentiment pairs ...")
-    get_aspect_senti_pairs(args, term_set)
+    # get_aspect_senti_pairs(args, term_set)
 
     print("[Annotate] Annotate all done!!!")
 

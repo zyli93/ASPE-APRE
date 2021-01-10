@@ -17,6 +17,8 @@ from nltk.tokenize import sent_tokenize, word_tokenize
 
 from utils import make_dir, dump_pkl, clean_str2
 
+# TODO: add removing data records only in test. See data_statistics.py for code.
+
 CONFIG_DIR = "./configs/"
 INPUT_DIR = "./raw_datasets/"
 OUTPUT_DIR = "./data/"

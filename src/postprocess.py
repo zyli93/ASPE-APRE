@@ -40,41 +40,7 @@ from extract import COL_AS_PAIRS_IDX
 COL_REV_TEXT = "original_text"
 COL_ASPAIRS = COL_AS_PAIRS_IDX
 
-# Arguments parser
-parser = argparse.ArgumentParser()
 
-# E.g.: ./data/amazon/home_kitchen
-parser.add_argument(
-    "--data_path",
-    type=str,
-    required=True,
-    help="Path to the dataset.")
-
-parser.add_argument(
-    "--num_aspects",
-    type=int,
-    required=True,
-    help="Number of aspect categories in total")
-
-parser.add_argument(
-    "--max_pad_length",
-    type=int,
-    default=100,
-    help="Max length of padding. Default=100.")
-
-parser.add_argument(
-    '--num_workers',
-    type=int,
-    default=8,
-    help="Number of multithread workers")
-
-parser.add_argument(
-    "--build_nbr_graph",
-    action="store_true",
-    default=False,
-    help="Whether to build neighborhood graph.")
-
-args = parser.parse_args()
 
 
 class EntityReviewAggregation:
@@ -172,7 +138,7 @@ class EntityReviewAggregation:
             dim=1)
 
 
-def agg_tokenized_data(df, n_partition=5):
+def agg_tokenized_data(args, df):
     """from annotation to user/item annotations
     
     Args:
@@ -194,32 +160,50 @@ def agg_tokenized_data(df, n_partition=5):
     if not all([x in df.columns for x in [COL_REV_TEXT, COL_ASPAIRS]]):
         raise KeyError("Missing a column from review text and aspairs")
 
+    useful_cols = ["original_text", COL_ASPAIRS]
+
     pandarallel.initialize(nb_workers=args.num_workers, progress_bar=True,
         use_memory_fs=False)
+
+    if args.n_partition > 1:
     
-    revs_to_return = []
-    # groupby users
-    useful_cols = ["original_text", COL_ASPAIRS]
-    for task in ['user_id', 'item_id']:
-        print("task {}".format(task))
-        uniq_ids = list(df[task])
-        partition_ids = defaultdict(list)
-        result_revs_list = []
-        for id_ in uniq_ids:
-            partition_ids[int(id_[2:]) % n_partition].append(id_)
+        revs_to_return = []
+        # groupby users
+        for task in ['user_id', 'item_id']:
+            print("task {}".format(task))
+            uniq_ids = list(df[task])
+            partition_ids = defaultdict(list)
+            result_revs_list = []
+            for id_ in uniq_ids:
+                partition_ids[int(id_[2:]) % args.n_partition].append(id_)
+            
+            for partition in partition_ids.keys():
+                print("partition {}".format(partition))
+                sub_df = df[df[task].isin(partition_ids[partition])]
+                # sub_revs = sub_df.groupby(task)[useful_cols].progress_apply(process)
+                sub_revs = sub_df.groupby(task)[useful_cols].parallel_apply(process)
+                result_revs_list.append(dict(sub_revs))
+                # dump_pkl("./temp/p{}_{}".format(partition, task), dict(sub_revs))
+            
+            result_revs = dict()
+            for _revs in result_revs_list:
+                result_revs = merge_dict(result_revs, _revs)
+            revs_to_return.append(result_revs)
         
-        for partition in partition_ids.keys():
-            print("partition {}".format(partition))
-            sub_df = df[df[task].isin(partition_ids[partition])]
-            # sub_revs = sub_df.groupby(task)[useful_cols].progress_apply(process)
-            sub_revs = sub_df.groupby(task)[useful_cols].parallel_apply(process)
-            # result_revs_list.append(dict(sub_revs))
-            dump_pkl("./temp/p{}_{}".format(partition, task), dict(sub_revs))
-        
-        result_revs = dict()
-        for _revs in result_revs_list:
-            result_revs = merge_dict(result_revs, _revs)
-        revs_to_return.append(result_revs)
+        return revs_to_return[0], revs_to_return[1]
+
+    elif args.num_workers > 1:
+        user_revs = df.groupby('user_id')[useful_cols].parallel_apply(process)
+        item_revs = df.groupby('item_id')[useful_cols].parallel_apply(process)
+        return dict(user_revs), dict(item_revs)
+    
+    else:
+        tqdm.pandas()
+        user_revs = df.groupby('user_id')[useful_cols].progress_apply(process)
+        item_revs = df.groupby('item_id')[useful_cols].progress_apply(process)
+        return dict(user_revs), dict(item_revs)
+
+
 
         
     # user_revs = df.groupby('user_id')[useful_cols].progress_apply(process)
@@ -230,7 +214,7 @@ def agg_tokenized_data(df, n_partition=5):
     # item_revs = df.groupby('item_id')[useful_cols].parallel_apply(process)
 
     # convert to dict
-    return dict(user_revs), dict(item_revs)
+    # return dict(user_revs), dict(item_revs)
 
 def main():
     """
@@ -243,6 +227,47 @@ def main():
         CF (user graphs), which has been solved by `graph.py` and build_graph.
         It takes care of the dumping.
     """
+    # Arguments parser
+    parser = argparse.ArgumentParser()
+
+    # E.g.: ./data/amazon/home_kitchen
+    parser.add_argument(
+        "--data_path",
+        type=str,
+        required=True,
+        help="Path to the dataset.")
+
+    parser.add_argument(
+        "--num_aspects",
+        type=int,
+        required=True,
+        help="Number of aspect categories in total")
+
+    parser.add_argument(
+        "--max_pad_length",
+        type=int,
+        default=100,
+        help="Max length of padding. Default=100.")
+
+    parser.add_argument(
+        '--num_workers',
+        type=int,
+        default=8,
+        help="Number of multithread workers")
+
+    parser.add_argument(
+        '--n_partition',
+        type=int,
+        default=4,
+        help="Number of partitions for multiprocessing.")
+
+    parser.add_argument(
+        "--build_nbr_graph",
+        action="store_true",
+        default=False,
+        help="Whether to build neighborhood graph.")
+
+    args = parser.parse_args()
 
     # fix path to be ./data/amazon/home_kitchen/
     args.data_path += '/' if args.data_path[-1] != '/' else ""
@@ -257,7 +282,7 @@ def main():
     df = pd.read_pickle(args.data_path + "train_data_aspairs.pkl")
 
     print("[postprocess] processing user/item annotation reviews ...")
-    user_anno_tkn_rev, item_anno_tkn_rev= agg_tokenized_data(df)
+    user_anno_tkn_rev, item_anno_tkn_rev= agg_tokenized_data(args, df)
 
     dump_pkl(args.data_path + "user_anno_tkn_revs.pkl", user_anno_tkn_rev)
     dump_pkl(args.data_path + "item_anno_tkn_revs.pkl", item_anno_tkn_rev)

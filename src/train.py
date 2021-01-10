@@ -13,7 +13,6 @@ import os
 import sys
 import argparse
 import logging
-from datetime import datetime
 
 import torch
 import torch.nn as nn
@@ -25,27 +24,33 @@ from sklearn.metrics import mean_squared_error
 
 from dataloader import DataLoader
 from model import APRE
+from postprocess import EntityReviewAggregation
+
+from utils import get_time, check_memory
 
 """
-don't forget to use model.train() and model.eval()
+TODO: don't forget to use model.train() and model.eval()
 """
+
+# TODO: initialize Linear!!!
+# TODO: whether to use dropout!!!
 
 # Arguments parser
 parser = argparse.ArgumentParser()
 
 # input and training configuration
-parser.add_argument("--task", type=str, require=True, help="Train/Test/Both?")
+parser.add_argument("--task", type=str, required=True, help="Train/Both?")
 parser.add_argument("--dataset", type=str, required=True, help="The dataset.")
 parser.add_argument("--shuffle", action="store_true", default=False,
                     help="Whether to shuffle data before a new epoch")
 parser.add_argument("--batch_size", type=int, default=128, help="The batch size of each iteration")
 parser.add_argument("--learning_rate", type=float, default=0.001, help="Learning rate")
 parser.add_argument("--num_epoch", type=int, default=20, help="Number of epoches")
-parser.add_argument("--opimizer", type=str, help="Selection of optimizer")
+parser.add_argument("--opimizer", type=str, default="adam", help="Selection of optimizer")
 parser.add_argument("--load_model", action="store_true", default=False,
                     help="Whether to resume training from an existing ckpt")
 parser.add_argument("--load_model_path", type=str, help="Path to load existing model")
-parser.add_argument("--padded_length", type=int, default=64, help="The padded length of input tokens")
+parser.add_argument("--padded_length", type=int, default=100, help="The padded length of input tokens")
 
 # experiment configuration
 parser.add_argument("--experimentID", type=str, required=True, help="The ID of the experiments")
@@ -67,8 +72,12 @@ parser.add_argument("--aspemb_max_norm", type=int, default=-1,
                     help="Max norm of aspect embedding. Set -1 for None.")
 parser.add_argument("--num_user", type=int, required=True, help="Number of users.")
 parser.add_argument("--num_item", type=int, required=True, help="Number of items.")
-parser.add_argument("--mid_dim", type=int, default=128, help="Intermediate layer size of the final MLP")
-parser.add_argument("--regularization_weight", type=float, help="Regularization weight of the model")
+parser.add_argument("--feat_dim", type=int, default=128, help="Intermediate layer size of the final MLP")
+parser.add_argument("--regularization_weight", type=float, default=0.0001, help="Regularization weight of the model")
+parser.add_argument("--num_last_layers", type=int, default=4, help="Number of last layers embedding to use in BERT.")
+parser.add_argument("--ex_attn_temp", type=float, default=1.0, help="Explicit temperature of review attention weights.")
+parser.add_argument("--im_attn_temp", type=float, default=1.0, help="Implicit temperature of review attention weights.")
+
 
 # save model configeration
 parser.add_argument("--save_model", action="store_true", default=False,
@@ -100,6 +109,12 @@ def get_optimizer(model):
         raise ValueError("`optimizater` supported: adam/rmsprop")
 
 
+def move_batch_to_gpu(batch):
+    for tensor_name, tensor in batch.items():
+        batch[tensor_name] = tensor.cuda()
+    return batch
+
+
 def train(model, dataloader):
 
     logging.info("[info] start training ID:[{}]".format(args.experimentID))
@@ -120,15 +135,36 @@ def train(model, dataloader):
     if args.task == "both":
         test_iter = dataloader.get_batch_iterator(for_train=False)
     
-    for ep in args.num_epoch:
+    for ep in range(args.num_epoch):
         trn_iter = dataloader.get_batch_iterator()
         model.train()  # model training flag
 
         total_loss = 0
-        for batch in trn_iter:
+        for idx, batch in enumerate(trn_iter):
             total_num_iter += 1
-            idx = batch.batch_idx
-            # TODO: change everything to good shape
+
+            """
+            TODO: this comment delete later
+                1. add process_batch function. move to device.
+                2. change batch back to dictionary
+                3. move data build from outside of model
+            """
+            
+            for k, v in batch.items():
+                print(k, v.element_size()*v.nelement())
+
+            # TODO: to delete
+            # sys.exit()
+
+            print("before move_batch_to_gpu")
+            check_memory()
+            if torch.cuda.is_available():
+                # if model on cuda, them move batch to cuda
+                batch = move_batch_to_gpu(batch)
+            print("after move_batch_to_gpu")
+            check_memory()
+            
+            print(batch['u_split'].sum())
 
             # make pred
             pred = model(batch)
@@ -164,7 +200,6 @@ def train(model, dataloader):
                 print("{} perf-it {}".format(get_time(), msg))
                 
         # avg loss this ep
-        # TODO: add print to all logging places
         msg = "ep:[{}] iter:[{}] avgloss:[{:.6f}]".format(
             ep, total_num_iter, total_loss / trn_iter.get_train_batch_num())
         logging.info("[perf]-ep " + msg)
@@ -205,6 +240,7 @@ def evaluate(model, test_dl, rooted=False, restore_model_path=None):
 
 if __name__ == "__main__":
 
+    print("="* 20 + "\n  ExperimentID " + args.experimentID + "\n" + "="*20)
     # config logging
     logging.basicConfig(filename='./log/{}.log'.format(args.experimentID), 
         filemode='w', level=logging.DEBUG, 
@@ -213,11 +249,13 @@ if __name__ == "__main__":
     
     # setup gpu
     if torch.cuda.device_count() > 0:
+        use_gpu = True
         assert torch.cuda.device_count() > args.gpu_id
         torch.cuda.set_device("cuda:"+str(args.gpu_id))
         msg = "[cuda] with {} gpus, using cuda:{}".format(
-            torch.cuda_device_count(), args.gpu_id)
+            torch.cuda.device_count(), args.gpu_id)
     else:
+        use_gpu = False
         msg = "[cuda] no gpus, using cpu"
     
     logging.info(msg)
@@ -232,6 +270,7 @@ if __name__ == "__main__":
     if torch.cuda.is_available():
         model = model.cuda()
 
+    print(args.batch_size)
     dataloader = DataLoader(dataset=args.dataset, shuffle=args.shuffle,
         batch_size=args.batch_size)
     
@@ -242,8 +281,3 @@ if __name__ == "__main__":
             restore_model_path=args.load_model_path)
     else:
         raise ValueError("args.task must in `train`, `test`, or `both`")
-
-
-def get_time():
-    time = datetime.now().isoformat()[:24]
-    return time
