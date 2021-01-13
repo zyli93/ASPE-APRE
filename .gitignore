@@ -172,3 +172,6 @@ daisyRec/
 
 # src not_used folder
 src/not_used
+
+# ckpt directory
+ckpt/

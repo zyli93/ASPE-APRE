@@ -15,7 +15,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from transformers import BertTokenizerFast, BertModel
+from transformers import BertModel
+# from transformers import DistilBertModel
 
 from utils import check_memory
 
@@ -45,13 +46,17 @@ class APRE(nn.Module):
         self.nlast_lyr = args.num_last_layers
         self.num_asp = args.num_aspects
         self.feat_dim = args.feat_dim # TODO: add use to feat_dim
-        self.bert_dim = 768
+        self.bert_dim = 256
+        # self.bert_dim = 768
         self.ex_temp = args.ex_attn_temp
         self.im_temp = args.im_attn_temp
         self.pad_len = args.padded_length
 
         # Whether the model returns all hidden-states.
-        self.bert = BertModel.from_pretrained('bert-base-uncased', output_hidden_states=True)
+        with torch.no_grad():
+            self.bert = BertModel.from_pretrained('google/bert_uncased_L-4_H-256_A-4', output_hidden_states=True)
+            # self.bert = BertModel.from_pretrained('bert-base-uncased', output_hidden_states=True)
+        # self.bert = DistilBertModel.from_pretrained('distilbert-base-uncased', output_hidden_states=True)
 
         # =========================
         #   Aspect related
@@ -81,8 +86,11 @@ class APRE(nn.Module):
         # ============================================
         # Implicit - Review-wise Attention Linear Layer
         # ============================================
-        self.im_urev_attn_linear = nn.Linear(bias=False, in_features=self.feat_dim, out_features=1)
-        self.im_irev_attn_linear = nn.Linear(bias=False, in_features=self.feat_dim, out_features=1)
+        self.im_urev_attn_linear = nn.Linear(bias=False, in_features=2*self.feat_dim, out_features=1)
+        self.im_irev_attn_linear = nn.Linear(bias=False, in_features=2*self.feat_dim, out_features=1)
+
+        self.im_u_cls_linear = nn.Linear(bias=False, in_features=self.bert_dim, out_features=self.feat_dim)
+        self.im_i_cls_linear = nn.Linear(bias=False, in_features=self.bert_dim, out_features=self.feat_dim)
 
         # [Removed from the final design] Channel 3 - CF
         
@@ -94,8 +102,9 @@ class APRE(nn.Module):
             nn.ReLU(),
             nn.Linear(bias=False, in_features=self.feat_dim, out_features=1))
         
+        # it's different that input shape is (..., feat_dim*4)
         self.im_mlp = nn.Sequential(
-            nn.Linear(bias=True, in_features=self.feat_dim*2, out_features=self.feat_dim),
+            nn.Linear(bias=True, in_features=self.feat_dim*4, out_features=self.feat_dim),
             nn.ReLU(),
             nn.Linear(bias=False, in_features=self.feat_dim, out_features=1))
 
@@ -155,9 +164,9 @@ class APRE(nn.Module):
           (same as i_bert_out)'''
         u_bert_out = self.bert(urevs_input_ids, urevs_attn_mask) 
 
-        print("bert irevs")
-        check_memory()
         i_bert_out = self.bert(irevs_input_ids, irevs_attn_mask)
+
+        # print("u/t batch size", urevs_input_ids.shape, irevs_input_ids.shape)
 
         # get last layers output, (`ll` is short of `last layers`)
         # nlast_lyr * (ttl_nrev, pad_len, 768) ==> ttl_nrev, pad_len, 768*nlast_lyr
@@ -187,16 +196,16 @@ class APRE(nn.Module):
             # user/item aspect representation
             # (ttl_nrev, num_asp, pad_len) [matmul] (ttl_nrev, pad_len, feat_dim)
             # generates (ttl_nrev, num_asp, feat_dim)
-            print("urevs_loc.shape", urevs_loc.shape)
-            print("urev_lang_enc.shape", urev_lang_enc.shape)
+            # print("urevs_loc.shape", urevs_loc.shape)
+            # print("urev_lang_enc.shape", urev_lang_enc.shape)
             uasp_repr = torch.matmul(urevs_loc.view(-1, self.num_asp, self.pad_len), urev_lang_enc)
             iasp_repr = torch.matmul(irevs_loc.view(-1, self.num_asp, self.pad_len), irev_lang_enc)
 
-            print("uasp_repr shape")
-            print(uasp_repr.shape)
+            # print("uasp_repr shape")
+            # print(uasp_repr.shape)
 
-            print("usplit")
-            print(u_split)
+            # print("usplit")
+            # print(u_split)
 
             # [list] bs * tuple of (nrev,num_asp,feat_dim)
             uasp_repr_spl = torch.split(uasp_repr, u_split, dim=0)
@@ -212,8 +221,8 @@ class APRE(nn.Module):
                 # duplicate dim[0] of emb_aspect by num_u_rev times
                 # ex_u_emb_aspect = self.emb_aspect.unsqueeze_(0).expand(num_u_rev)
                 ex_u_emb_aspect = torch.unsqueeze(self.emb_aspect, 0).expand(num_u_rev, -1, -1)
-                print(ex_u_emb_aspect.shape)
-                print(uasp_repr_spl[i].shape)
+                # print(ex_u_emb_aspect.shape)
+                # print(uasp_repr_spl[i].shape)
 
                 # After cat => (nrev, num_asp, 2*feat_dim); After linear => nrev*num_asp*1
                 # [OUTPUT] urev_attn_w & irev_attn_w can be output!
@@ -224,8 +233,8 @@ class APRE(nn.Module):
                 # After mul => (nrev, num_asp, feat_dim), sum => (num_asp, feat_dim)
                 uasp_repr_revagg = torch.sum(torch.mul(urev_attn_w, uasp_repr_spl[i]), dim=0, keepdim=False)
                 
-                print("iasp_repr_spl[i].shape")
-                print(iasp_repr_spl[i].shape)
+                # print("iasp_repr_spl[i].shape")
+                # print(iasp_repr_spl[i].shape)
                 ex_i_emb_aspect = torch.unsqueeze(self.emb_aspect, 0).expand(num_i_rev, -1, -1)
                 irev_attn_w = F.softmax(dim=0, input=F.tanh(
                         self.ex_irev_attn_linear(torch.cat((iasp_repr_spl[i], ex_i_emb_aspect), dim=2))) / self.ex_temp)
@@ -244,13 +253,17 @@ class APRE(nn.Module):
             # urev_lang_enc/irev_lang_enc (ttl_nrev, pad_len, 768)
             
             # fetch [CLS] token representation, (ttl_nrev, bert_dim)
-            urevs_cls_repr, irevs_cls_repr = u_bert_out[1], i_bert_out[1]
+            # urevs_cls_repr, irevs_cls_repr = u_bert_out[1], i_bert_out[1]
+
+            # [new] fetch [CLS] token representation, (ttl_nrew, feat_dim)
+            urevs_cls_repr = self.im_u_cls_linear(u_bert_out[1])
+            irevs_cls_repr = self.im_i_cls_linear(i_bert_out[1])
             
             # After sum => (ttl_nrev, 768); After div => (ttl_nrev, 768)
             urevs_avgpool_repr = torch.div(torch.sum(urev_lang_enc, dim=1), torch.sum(urev_lang_enc!=0, dim=1))
             irevs_avgpool_repr = torch.div(torch.sum(irev_lang_enc, dim=1), torch.sum(irev_lang_enc!=0, dim=1))
             
-            # concat=> ttl_nrev, 768*2
+            # concat=> ttl_nrev, feat_dim + 768
             uconcat_repr = torch.cat([urevs_cls_repr, urevs_avgpool_repr], dim=-1)
             iconcat_repr = torch.cat([irevs_cls_repr, irevs_avgpool_repr], dim=-1)
 
@@ -259,10 +272,16 @@ class APRE(nn.Module):
 
             uimpl_repr_agg, iimpl_repr_agg = [], []
             for i in range(len(u_split)):
-                # nrev*768 
+                # Before: (nrev, feat_dim)
                 # linear => nrev*1, tanh, softmax (no change on size)
                 uimpl_rev_w = F.softmax(dim=0, input=F.tanh(self.im_urev_attn_linear(uimpl_repr_spl[i])))
-                iimpl_rev_w = F.softmax(dim=0, imput=F.tanh(self.im_irev_attn_linear(iimpl_repr_spl[i])))
+                iimpl_rev_w = F.softmax(dim=0, input=F.tanh(self.im_irev_attn_linear(iimpl_repr_spl[i])))
+
+                # print("uimpl_rev_w.shape")
+                # print(uimpl_rev_w.shape)
+
+                # print("uimpl_repr_spl[i].shape")
+                # print(uimpl_repr_spl[i].shape)
                 
                 uimpl_rev_attn_agg = torch.sum(torch.mul(uimpl_repr_spl[i], uimpl_rev_w), dim=0)
                 iimpl_rev_attn_agg = torch.sum(torch.mul(iimpl_repr_spl[i], iimpl_rev_w), dim=0)
@@ -282,16 +301,17 @@ class APRE(nn.Module):
         #   Merge Ex & Im channels
         # ==========================
         # create tensor for user ID and item ID
-        batch_uid, batch_iid = torch.from_numpy(batch.users), torch.from_numpy(batch.items)
+        batch_uid, batch_iid = batch['uid'], batch['iid']
 
         # first three terms: (bs, 1), (bs, 1), (bs, 1)
-        pred = self.b_u(batch_uid) + self.b_t(batch_iid) + self.im_mlp(torch.cat(u_impl_repr, i_impl_repr))
+        pred = self.b_u(batch_uid) + self.b_t(batch_iid) + self.im_mlp(torch.cat(
+            (u_impl_repr, i_impl_repr), dim=-1))
         pred = pred.squeeze()  # (bs)
 
         # (bs, num_asp, 2*feat_dim) => MLP => (bs, num_asp, 1) => squeeze => (bs, num_asp)
         # (bs, num_asp) matmul (num_asp, 1) -> (bs, 1) -> (bs)
         pred += torch.matmul(
-            self.ex_mlp(torch.cat(u_expl_repr, i_expl_repr)).squeeze(), 
+            self.ex_mlp(torch.cat((u_expl_repr, i_expl_repr), dim=-1)).squeeze(), 
             torch.unsqueeze(self.gamma, 1)).squeeze()
 
         return pred

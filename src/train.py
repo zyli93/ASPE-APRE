@@ -21,12 +21,13 @@ import torch.optim as optim
 
 import numpy as np
 from sklearn.metrics import mean_squared_error
+from collections import deque
 
 from dataloader import DataLoader
 from model import APRE
 from postprocess import EntityReviewAggregation
 
-from utils import get_time, check_memory
+from utils import get_time, check_memory, print_args, make_dir
 
 """
 TODO: don't forget to use model.train() and model.eval()
@@ -58,6 +59,8 @@ parser.add_argument("--log_iter_num", type=int, default=1000,
                     help="Number of iterations to write status log.")
 parser.add_argument("--eval_epoch_num", type=int, default=1000, 
                     help="Number of epochs to evaluate current model")
+parser.add_argument("--eval_after_epoch_num", type=int, default=5,
+                    help="Start to evaluate after num of epochs")
 parser.add_argument("--gpu_id", type=int, default=5, help="ID of GPU to use.")
 parser.add_argument("--random_seed", type=int, default=1993, help="Random seed of PyTorch and Numpy")
 
@@ -77,12 +80,14 @@ parser.add_argument("--regularization_weight", type=float, default=0.0001, help=
 parser.add_argument("--num_last_layers", type=int, default=4, help="Number of last layers embedding to use in BERT.")
 parser.add_argument("--ex_attn_temp", type=float, default=1.0, help="Explicit temperature of review attention weights.")
 parser.add_argument("--im_attn_temp", type=float, default=1.0, help="Implicit temperature of review attention weights.")
+parser.add_argument("--max_review_num", type=int, default=30, help="Maximum number of reviews to sample")
 
 
 # save model configeration
 parser.add_argument("--save_model", action="store_true", default=False,
                     help="Whether to turn on model saving.")
-parser.add_argument("--save_model_iter_num", type=int, default=1000,
+parser.add_argument("--save_epoch_num", type=int, default=2, help="Save model per x epochs.")
+parser.add_argument("--save_after_epoch_num", type=int, default=1000,
                     help="Number of iterations per model saving." + 
                          "Only in effect when `save_model` is turned on.")
 parser.add_argument("--save_model_path", type=str, default="./ckpt/",
@@ -111,7 +116,8 @@ def get_optimizer(model):
 
 def move_batch_to_gpu(batch):
     for tensor_name, tensor in batch.items():
-        batch[tensor_name] = tensor.cuda()
+        if tensor_name != "u_split" and tensor_name != "i_split":
+            batch[tensor_name] = tensor.cuda()
     return batch
 
 
@@ -119,6 +125,10 @@ def train(model, dataloader):
 
     logging.info("[info] start training ID:[{}]".format(args.experimentID))
     print("[train] started training, ID:{}".format(args.experimentID))
+
+    # sliding avg container
+    dq = deque([], maxlen=50)
+    clamp_dq = deque([], maxlen=50)
 
     # optimizer
     optimizer = get_optimizer(model)
@@ -130,47 +140,27 @@ def train(model, dataloader):
     if args.load_model:
         print("[train] loading model from {}".format(args.load_model_path))
         model.load_state_dict(torch.load(args.load_model_path))
-    total_num_iter = 0
-
-    if args.task == "both":
-        test_iter = dataloader.get_batch_iterator(for_train=False)
+    total_num_iter_counter = 0
     
     for ep in range(args.num_epoch):
         trn_iter = dataloader.get_batch_iterator()
+        total_num_iter_per_epoch = dataloader.get_train_batch_num()
         model.train()  # model training flag
 
         total_loss = 0
         for idx, batch in enumerate(trn_iter):
-            total_num_iter += 1
+            total_num_iter_counter += 1
 
-            """
-            TODO: this comment delete later
-                1. add process_batch function. move to device.
-                2. change batch back to dictionary
-                3. move data build from outside of model
-            """
-            
-            for k, v in batch.items():
-                print(k, v.element_size()*v.nelement())
-
-            # TODO: to delete
-            # sys.exit()
-
-            print("before move_batch_to_gpu")
-            check_memory()
             if torch.cuda.is_available():
                 # if model on cuda, them move batch to cuda
                 batch = move_batch_to_gpu(batch)
-            print("after move_batch_to_gpu")
-            check_memory()
             
-            print(batch['u_split'].sum())
-
             # make pred
             pred = model(batch)
 
-            # get ground truth
-            target = torch.from_numpy(batch.rtg)
+
+            # get ground truth, convert to float tensor
+            target = batch['rtg'].float()
 
             # clean out existing gradients
             optimizer.zero_grad()
@@ -178,63 +168,88 @@ def train(model, dataloader):
             # build loss term
             loss = criterion(pred, target)
 
+            clamp_loss = torch.mean((torch.clamp(pred, 1.0, 5.0) - target)**2).item()
+
+            dq.append(loss.item())
+            sliding_perf = sum(dq) / len(dq)
+
+            clamp_dq.append(clamp_loss)
+            clamp_sliding_perf = sum(clamp_dq) / len(clamp_dq)
+
             # optimization
             loss.backward()
             optimizer.step()
 
             total_loss += loss.item()
 
-            # save model
-            if args.save_model and not total_num_iter % args.save_model_iter_num:
-                model_name = "model_id{}_ep{}_it{}".format(
-                    args.experimentID, ep, total_num_iter)
-                torch.save(model.state_dict(), path=args.save_model_path+"/"+model_name)
-                logging.info("[save] saving model: {}".format(model_name))
-                print("{} saving {}".format(get_time(), model_name))
-                
             # log model
-            if idx and not idx % args.total_num_iter:
-                msg = "ep:[{}] iter:[{}/{}] loss:[{:.6f}]".format(
-                    ep, idx, total_num_iter, loss.item())
-                logging.info("[perf]-iter " + msg)
-                print("{} perf-it {}".format(get_time(), msg))
+            if idx > 0 and idx % args.log_iter_num == 0:
+                msg = "ep:[{}] iter:[{}/{}] loss:[{:.4f}] RawLoss:[{:.3f}] ClampLoss:[{:.3f}]".format(
+                    ep, idx, total_num_iter_per_epoch, loss.item(), sliding_perf, clamp_sliding_perf)
+                logging.info("[Perf][Iter] " + msg)
+                print("{} [Perf][Iter] {}".format(get_time(), msg))
+            
+            # HARD CODE HERE
+            if loss.item() > 2. and ep > args.eval_after_epoch_num:
+                pred_str = ", ".join(["{:.2f}".format(x) for x in pred])
+                target_str = ", ".join(["{:.2f}".format(x) for x in target])
+                logging.info("[Perf][Iter][Abnormal] [{}], [{}]".format(pred_str, target_str))
+
                 
         # avg loss this ep
         msg = "ep:[{}] iter:[{}] avgloss:[{:.6f}]".format(
-            ep, total_num_iter, total_loss / trn_iter.get_train_batch_num())
-        logging.info("[perf]-ep " + msg)
-        print("{} perf-ep {}".format(get_time(), msg))
+            ep, total_num_iter_counter, total_loss / total_num_iter_per_epoch)
+        logging.info("[Perf][Epoch] " + msg)
+        print("{} [Perf][Epoch] {}".format(get_time(), msg))
         
-        # run test
-        if not ep % args.eval_epoch_num and args.task == "both":
-            test_mse = evaluate(model, test_iter, rooted=False)
+        # run test with three conditions:
+        #   1. dataset as "both"
+        #   2. ep > a certain number & ep % eval_per_epoch == 0
+        if not ep % args.eval_epoch_num and args.task == "both" \
+            and ep >= args.eval_after_epoch_num - 1:
+            test_mse = evaluate(model, 
+                test_dl=dataloader.get_batch_iterator(for_train=False), rooted=False)
             msg = "ep:[{}] mse:[{}]".format(ep, test_mse)
             logging.info("[test] {}".format(msg))
-            print("{} perf-test {}".format(get_time(), msg))
+            print("{} [Perf][Test] {}".format(get_time(), msg))
+
+        # save model
+        if args.save_model and not ep % args.save_epoch_num \
+            and ep >= args.save_after_epoch_num - 1:
+            model_name = "model_ExpID{}_EP{}".format(args.experimentID, ep)
+            torch.save(model.state_dict(), args.save_model_path + model_name)
+            logging.info("[save] saving model: {}".format(model_name))
+            print("{} saving {}".format(get_time(), model_name))
 
 
 def evaluate(model, test_dl, rooted=False, restore_model_path=None):
     model.eval()
     full_pred = []
+    full_pred_clamp = []
     full_target = []
     if restore_model_path:
         model.load_state_dict(torch.load(restore_model_path))
     with torch.no_grad():
         for test_batch in test_dl:
+            test_batch = move_batch_to_gpu(test_batch)
             test_pred = model(test_batch)
-            test_target = test_batch.rtg
+            test_pred_clamp = torch.clamp(test_pred, 1.0, 5.0)
+            test_target = test_batch['rtg'].float()
 
-            full_pred.append(test_pred.numpy())
-            full_target.append(test_target)
+            full_pred.append(test_pred.cpu().detach().numpy())
+            full_pred_clamp.append(test_pred_clamp.cpu().detach().numpy())
+            full_target.append(test_target.cpu().detach().numpy())
         
     full_test_pred = np.concatenate(full_pred)
     full_test_target = np.concatenate(full_target)
+    full_test_pred_clamp = np.concatenate(full_pred_clamp)
     mse = mean_squared_error(full_test_target, full_test_pred)
+    clamp_mse = mean_squared_error(full_test_target, full_test_pred_clamp)
 
     if rooted:
-        return np.sqrt(mse)
+        return np.sqrt(mse), np.sqrt(clamp_mse)
     else:
-        return mse
+        return mse, clamp_mse
     
 
 
@@ -257,6 +272,9 @@ if __name__ == "__main__":
     else:
         use_gpu = False
         msg = "[cuda] no gpus, using cpu"
+
+    print_args(args)
+    make_dir("./ckpt/")
     
     logging.info(msg)
     print("{} {}".format(get_time(), msg))
@@ -270,9 +288,8 @@ if __name__ == "__main__":
     if torch.cuda.is_available():
         model = model.cuda()
 
-    print(args.batch_size)
     dataloader = DataLoader(dataset=args.dataset, shuffle=args.shuffle,
-        batch_size=args.batch_size)
+        batch_size=args.batch_size, max_sample_num=args.max_review_num)
     
     if args.task == "train" or args.task == "both":
         train(model, dataloader)

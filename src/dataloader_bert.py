@@ -65,8 +65,8 @@ class DataLoader:
             user_annotated_reviews: [dict] {uid: EntityReviewAggregation}
             item_annotated_reviews: [dict] {iid: EntityReviewAggregation}
         """
-        user_review_path = "./data/amazon/{}/user_anno_tkn_revs.pkl".format(self.ds)
-        item_review_path = "./data/amazon/{}/item_anno_tkn_revs.pkl".format(self.ds)
+        user_review_path = "./data/amazon/{}/user_anno_tkn_revs_bert.pkl".format(self.ds)
+        item_review_path = "./data/amazon/{}/item_anno_tkn_revs_bert.pkl".format(self.ds)
         return load_pkl(user_review_path), load_pkl(item_review_path)
 
     def __load_user_item_nbr(self):
@@ -249,6 +249,19 @@ class DataLoader:
                      "u_split": u_split,
                      "i_split": i_split
             }
+            
+            batch = {'uid': users,
+                     'iid': items,
+                     'urevs_loc': urevs_loc,
+                     'irevs_loc': irevs_loc,
+                     'urevs_last_state': urevs_last_state,
+                     'irevs_last_state': irevs_last_state,
+                     'urevs_pooler': urevs_pooler,
+                     'irevs_pooler': irevs_pooler,
+                     'u_split': u_split,
+                     'i_split': i_split
+            }
+                     
 
             # if self.use_gpu:
             #     self.__move_rev_to_device(batch)

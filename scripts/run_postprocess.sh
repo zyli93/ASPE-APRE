@@ -1,5 +1,5 @@
 # automotive 
-python src/postprocess.py --data_path=./data/amazon/automotive/ --num_aspects 291 ----n_partition 1
+python src/postprocess.py --data_path=./data/amazon/automotive/ --num_aspects 291 ----n_partition 1  --num_workers 1
 
 # digital_music
 python src/postprocess.py --data_path=./data/amazon/digital_music/ --num_aspects 296 --n_partition 1

@@ -9,6 +9,7 @@
     Python Version: 3.6
 '''
 from scipy.stats import describe
+import numpy as np
 import pandas as pd
 from nltk.tokenize import word_tokenize, sent_tokenize
 from pandarallel import pandarallel
@@ -81,7 +82,7 @@ if __name__ == "__main__":
                 name, n_r, n_u, n_t, n_r/(n_u*n_t), 
                 total_words, rpu, rpt, df.word_count.mean()
             ))
-    elif True:
+    elif False:
         for name in names:
             print(name)
             df, test_df = load_df(name)
@@ -115,6 +116,18 @@ if __name__ == "__main__":
         print(test_df['item_id'].nunique())
         trn_item_ser = df['item_id'].apply(lambda x: int(x[2:]))
         print(trn_item_ser.max(), trn_item_ser.min())
+    
+    elif True:
+        for name in names:
+            print(name)
+            df, test_df = load_df(name)
+            rpu = review_per_user(df)
+            print(list(range(50, 101, 5)))
+            print(np.percentile(rpu.to_numpy(), range(50, 101, 5)))
+            rpt = review_per_item(df)
+            print(list(range(50, 101, 5)))
+            print(np.percentile(rpt.to_numpy(), range(50, 101, 5)))
+            print("")
     else:
         for name in names:
             df, test_df = load_df(name)

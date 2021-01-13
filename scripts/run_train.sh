@@ -10,7 +10,6 @@
 
 # Run cmd:
 #   $ bash run_train.sh [exp_id] [dataset_name] [gpu_id] [num_aspects] [num_user] [num_item]
-
 #   $ bash run_train.sh [exp_id] [dataset_name] [gpu_id] [num_aspects] [num_user] [num_item]
 #   $ bash run_train.sh [exp_id] [dataset_name] [gpu_id] [num_aspects] [num_user] [num_item]
 #   $ bash run_train.sh [exp_id] [dataset_name] [gpu_id] [num_aspects] [num_user] [num_item]
@@ -41,20 +40,95 @@
 
 echo "using GPU $2"
 
-if [ $1 = automotive ]
-    then
+if [ $1 = 0001 ]
+then
     python src/train.py --experimentID 0001 \
+        --gpu_id $2 \
         --task both \
         --dataset automotive \
         --shuffle \
-        --batch_size 1 \
-        --learning_rate 0.0001 \
-        --num_epoch 1 \
-        --log_iter_num 10 \
-        --eval_epoch_num 1000 --num_aspects 291 --num_user 2928 --num_item 1835 \
+        --batch_size 30 \
+        --learning_rate 0.00003 \
+        --num_epoch 20 \
+        --eval_epoch_num 1 --eval_after_epoch_num 5 \
+        --log_iter_num 20 \
+        --num_aspects 291 --num_user 2928 --num_item 1835 \
         --feat_dim 300 --num_last_layers 4 \
         --ex_attn_temp 1.0 --im_attn_temp 1.0 \
-        --gpu_id $2 
- else
+        --max_review_num 30 \
+        --save_model --save_after_epoch_num 5 --save_epoch_num 2
+    
+# 0001 vs 0002 on learning rate
+elif [ $1 == 0002 ]
+then
+    python src/train.py --experimentID 0002 \
+        --gpu_id $2 \
+        --task both \
+        --dataset automotive \
+        --shuffle \
+        --batch_size 30 \
+        --learning_rate 0.00004 \
+        --num_epoch 20 \
+        --eval_epoch_num 1 --eval_after_epoch_num 5 \
+        --log_iter_num 20 \
+        --num_aspects 291 --num_user 2928 --num_item 1835 \
+        --feat_dim 300 --num_last_layers 4 \
+        --ex_attn_temp 1.0 --im_attn_temp 1.0 \
+        --max_review_num 30 \
+        --save_model --save_after_epoch_num 5 --save_epoch_num 2
+
+elif [ $1 == 0003 ]
+then
+    python src/train.py --experimentID $1\
+        --gpu_id $2 \
+        --task both \
+        --dataset automotive \
+        --shuffle \
+        --batch_size 30 \
+        --learning_rate 0.00003 \
+        --num_epoch 20 \
+        --eval_epoch_num 1 --eval_after_epoch_num 5 \
+        --log_iter_num 20 \
+        --num_aspects 291 --num_user 2928 --num_item 1835 \
+        --feat_dim 200 --num_last_layers 4 \
+        --ex_attn_temp 1.0 --im_attn_temp 1.0 \
+        --max_review_num 30 \
+        --save_model --save_after_epoch_num 5 --save_epoch_num 2
+
+elif [ $1 = 0004 ]
+then
+    python src/train.py --experimentID $1 \
+        --gpu_id $2 \
+        --task both \
+        --dataset automotive \
+        --shuffle \
+        --batch_size 24 \
+        --learning_rate 0.00003 \
+        --num_epoch 20 \
+        --eval_epoch_num 1 --eval_after_epoch_num 5 \
+        --log_iter_num 20 \
+        --num_aspects 291 --num_user 2928 --num_item 1835 \
+        --feat_dim 128 --num_last_layers 4 \
+        --ex_attn_temp 1.0 --im_attn_temp 1.0 \
+        --max_review_num 30 \
+        --save_model --save_after_epoch_num 5 --save_epoch_num 2
+elif [ $1 = 0005 ]
+then
+    python src/train.py --experimentID $1 \
+        --gpu_id $2 \
+        --task both \
+        --dataset automotive \
+        --shuffle \
+        --batch_size 24 \
+        --learning_rate 0.00003 \
+        --num_epoch 20 \
+        --eval_epoch_num 1 --eval_after_epoch_num 5 \
+        --log_iter_num 20 \
+        --num_aspects 291 --num_user 2928 --num_item 1835 \
+        --feat_dim 300 --num_last_layers 2 \
+        --ex_attn_temp 1.0 --im_attn_temp 1.0 \
+        --max_review_num 30 \
+        --save_model --save_after_epoch_num 5 --save_epoch_num 2
+else
     echo "not supported"
 fi

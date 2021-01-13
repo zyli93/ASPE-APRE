@@ -29,6 +29,7 @@ from tqdm import tqdm
 from nltk.tokenize import sent_tokenize
 from scipy.sparse import csr_matrix
 from transformers import BertTokenizerFast
+from transformers import BertModel
 from pandarallel import pandarallel
 
 import torch
@@ -43,8 +44,15 @@ COL_ASPAIRS = COL_AS_PAIRS_IDX
 
 
 
-class EntityReviewAggregation:
-    def __init__(self, reviews, aspairs, pad_len, num_asp):
+def tokenize_text(tokenizer, reviews, pad_len):
+    return tokenizer(reviews, return_tensors="pt", padding="max_length", 
+        max_length=pad_len, truncation=True, return_token_type_ids=False)
+
+def encode_text(bert, encoding):
+    return bert(**encoding)
+
+class EntityReviewAggregationBert:
+    def __init__(self, reviews, aspairs, pad_len, num_asp, max_size, use_gpu, bert, tokenizer):
         """Save aggregated reviews for users and items
 
         to keep as attributes:
@@ -66,40 +74,55 @@ class EntityReviewAggregation:
         self.pad_len = pad_len
         self.num_asp = num_asp
         self.reviews = reviews
+        self.max_size = max_size
+
+        if len(reviews) > max_size:
+            indices = np.random.choice(range(len(reviews)), max_size, True).tolist()
+            reviews = [reviews[i] for i in indices]
+            aspairs = [aspairs[i] for i in indices]
 
         # create tokenizer
-        tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased")
+        # tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased")
 
         # first tokenize reviews
         # only returns input_ids and attention_mask
         # no token_type_ids needed as we are handling single sentence/doc.
-        self.tokenized_revs = tokenizer(
-            reviews, return_tensors="pt", padding="max_length", 
-            max_length=pad_len, truncation=True, return_token_type_ids=False)
+        # self.tokenized_revs = tokenizer(
+        #     reviews, return_tensors="pt", padding="max_length", 
+        #     max_length=pad_len, truncation=True, return_token_type_ids=False)
+        tokenized_revs = tokenize_text(tokenizer, reviews=reviews, pad_len=pad_len)
         
         # get shape and pad to `pad_len`
-        tokenizer_padded_shape = self.tokenized_revs['input_ids'].shape
+        tokenizer_padded_shape = tokenized_revs['input_ids'].shape
         if tokenizer_padded_shape[1] < pad_len:
             for field in ['input_ids', 'attention_mask']:
-                self.tokenized_revs[field] = self.__pad_to_fixedlen(
-                    self.tokenized_revs[field])
-            
-        input_ids_tensor = self.tokenized_revs['input_ids']
+                tokenized_revs[field] = self.__pad_to_fixedlen(tokenized_revs[field])
+        
+        # move to cuda
+        if use_gpu:
+            for field in ['input_ids', 'attention_mask']:
+                tokenized_revs[field] =  tokenized_revs[field].cuda()       
+        # encode
+        with torch.no_grad():
+            output = encode_text(bert, tokenized_revs)
+            self.last_hidden_state = output[0].cpu()
+            self.pooler_output = output[1].cpu()
+
+        input_ids_tensor = tokenized_revs['input_ids']
         
         # tokenize aspairs
         self.revs_asp_mention_locs = []
         for i, aspair_list in enumerate(aspairs):
             senti_id_to_asp = defaultdict(list)
             for asp, senti in aspair_list:
-                senti_id = tokenizer(senti, 
-                    add_special_tokens=False)['input_ids'][0]
+                senti_id = tokenizer(senti, add_special_tokens=False)['input_ids'][0]
                 senti_id_to_asp[senti_id].append(asp)
 
             # asp_mention_loc is (num_asp * pad_len) matrix, saves location of asp
             asp_mention_loc = np.zeros(
                 (self.num_asp, self.pad_len), dtype=np.int32)
             for senti_id in senti_id_to_asp:
-                loc_vector = (input_ids_tensor[i] == senti_id)\
+                loc_vector = (input_ids_tensor[i] == senti_id).cpu().detach()\
                              .numpy().astype(np.int32)
                 for asp_i in senti_id_to_asp[senti_id]:
                     asp_mention_loc[asp_i] += loc_vector
@@ -117,13 +140,13 @@ class EntityReviewAggregation:
                 Two fields: `input_ids`, `attention_mask`
             self.revs_asp_mention_locs - list of sp matrixs
         """
-        return self.tokenized_revs, self.revs_asp_mention_locs
+        return self.last_hidden_state, self.pooler_output, self.revs_asp_mention_locs
     
     def set_anno_tkn_revs(self, new_anno_tkn_revs):
         self.tokenized_revs = new_anno_tkn_revs
     
     def get_rev_size(self):
-        return self.tokenized_revs['input_ids'].shape[0]
+        return self.last_hidden_state.shape[0]
     
     def __pad_to_fixedlen(self, tensor):
         """pad to fixed length.
@@ -138,7 +161,7 @@ class EntityReviewAggregation:
             dim=1)
 
 
-def agg_tokenized_data(args, df):
+def agg_tokenized_data(args, df, use_gpu, bert, tokenizer):
     """from annotation to user/item annotations
     
     Args:
@@ -153,9 +176,10 @@ def agg_tokenized_data(args, df):
         return (dict2.update(dict1))
 
     def process(row):
-        return EntityReviewAggregation(
+        return EntityReviewAggregationBert(
             reviews=row.original_text, aspairs=row[COL_ASPAIRS],
-            pad_len=args.max_pad_length, num_asp=args.num_aspects)
+            pad_len=args.max_pad_length, num_asp=args.num_aspects, max_size=args.max_size,
+            use_gpu=use_gpu, bert=bert, tokenizer=tokenizer)
 
     if not all([x in df.columns for x in [COL_REV_TEXT, COL_ASPAIRS]]):
         raise KeyError("Missing a column from review text and aspairs")
@@ -202,19 +226,9 @@ def agg_tokenized_data(args, df):
         user_revs = df.groupby('user_id')[useful_cols].progress_apply(process)
         item_revs = df.groupby('item_id')[useful_cols].progress_apply(process)
         return dict(user_revs), dict(item_revs)
+        # return dict(user_revs)
+        # return dict(item_revs)
 
-
-
-        
-    # user_revs = df.groupby('user_id')[useful_cols].progress_apply(process)
-    # item_revs = df.groupby('item_id')[useful_cols].progress_apply(process)
-
-    # old code
-    # user_revs = df.groupby('user_id')[useful_cols].parallel_apply(process)
-    # item_revs = df.groupby('item_id')[useful_cols].parallel_apply(process)
-
-    # convert to dict
-    # return dict(user_revs), dict(item_revs)
 
 def main():
     """
@@ -262,6 +276,18 @@ def main():
         help="Number of partitions for multiprocessing.")
 
     parser.add_argument(
+        '--gpu_id',
+        type=int,
+        default=4,
+        help="GPU ID.")
+
+    parser.add_argument(
+        '--max_size',
+        type=int,
+        default=40,
+        help="Maximum review size")
+
+    parser.add_argument(
         "--build_nbr_graph",
         action="store_true",
         default=False,
@@ -271,6 +297,20 @@ def main():
 
     # fix path to be ./data/amazon/home_kitchen/
     args.data_path += '/' if args.data_path[-1] != '/' else ""
+
+    bert = BertModel.from_pretrained("bert-base-uncased")
+    tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased")
+
+    # setup gpu
+    if torch.cuda.device_count() > 0:
+        use_gpu = True
+        assert torch.cuda.device_count() > args.gpu_id  # TODO: fix this
+        torch.cuda.set_device("cuda:"+str(args.gpu_id))
+        bert = bert.cuda()
+    else:
+        use_gpu = False
+    
+
 
     # =====================
     # Part I - labeling
@@ -282,21 +322,12 @@ def main():
     df = pd.read_pickle(args.data_path + "train_data_aspairs.pkl")
 
     print("[postprocess] processing user/item annotation reviews ...")
-    user_anno_tkn_rev, item_anno_tkn_rev= agg_tokenized_data(args, df)
+    user_anno_tkn_rev, item_anno_tkn_rev= agg_tokenized_data(args, df, use_gpu, bert, tokenizer)
+    # user_anno_tkn_rev = agg_tokenized_data(args, df, use_gpu, bert, tokenizer)
+    # item_anno_tkn_rev = agg_tokenized_data(args, df, use_gpu, bert, tokenizer)
 
-    dump_pkl(args.data_path + "user_anno_tkn_revs.pkl", user_anno_tkn_rev)
-    dump_pkl(args.data_path + "item_anno_tkn_revs.pkl", item_anno_tkn_rev)
-
-    # =====================
-    # Part II - user/item graph
-    # =====================
-
-    if args.build_nbr_graph:
-        from graph import build_graph
-        print("[postprocess] processing user/item neighbor data ...")
-        user_nbr, item_nbr = build_graph(path=args.data_path)
-        dump_pkl(args.data_path + "user_nbr_item.pkl", user_nbr)
-        dump_pkl(args.data_path + "item_nbr_user.pkl", item_nbr)
+    dump_pkl(args.data_path + "user_anno_tkn_revs_bert.pkl", user_anno_tkn_rev)
+    dump_pkl(args.data_path + "item_anno_tkn_revs_bert.pkl", item_anno_tkn_rev)
 
     print("[postprocess] done! Save four files `anno_tkn_revs` and `nbr`")
 

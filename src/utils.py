@@ -62,7 +62,7 @@ def make_dir(path):
         os.makedirs(path, exist_ok=True)
 
 def get_time():
-    time = datetime.now().isoformat()[:24]
+    time = datetime.now().isoformat()[5:24]
     return time
 
 def check_memory():
@@ -163,7 +163,6 @@ def prepare_minibatch(mb, vocab, device=None, sort=True):
     # vocab returns 0 if the word is not there
     x = [pad([vocab.w2i.get(t, 0) for t in ex.tokens], maxlen) for ex in mb]
     y = [ex.scores for ex in mb]
-
 
     x = np.array(x)
     y = np.array(y, dtype=np.float32)
@@ -284,3 +283,16 @@ def lemmatized_string(s):
         ns += lemmatizer.lemmatize(token)
         ns += ' '
     return ns[:-1]
+
+
+def print_args(args):
+    not_print = set(
+        ['padded_length', "random_seed", "disable_cf", "aspemb_max_norm", "eval_as_cls"])
+
+    print("")
+    print("="* 70)
+    for arg in vars(args):
+        if arg not in not_print:
+            print("\t" + arg + " = " + str(getattr(args, arg)))
+    print("="* 70)
+    print("")
