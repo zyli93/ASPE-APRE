@@ -6,7 +6,8 @@
 echo "parsing output ..."
 # for ds in home_kitchen  office_products  pet_supplies  sports_outdoors  video_games
 # for ds in automotive
-for ds in sports_outdoors toys_games
+# for ds in sports_outdoors toys_games
+for ds in tools_home 
 do
     echo "PARSING ..."
     for trn in 2014Lap 2014Res 2015Res

@@ -14,6 +14,7 @@ from random import shuffle
 import pandas as pd
 import numpy as np
 from easydict import EasyDict as edict
+from transformers import BertModel
 
 import torch
 
@@ -32,6 +33,7 @@ class DataLoader:
                  shuffle=True,
                  batch_size=128,
                  use_nbr=False,
+                 use_gpu=True,
                  max_sample_num=30
                  ):
         """initialize DataLoader
@@ -48,6 +50,7 @@ class DataLoader:
         self.recurrent_iteration = False
         self.use_neighbor = use_nbr
         self.max_sample_num = max_sample_num
+        self.use_gpu = use_gpu
 
         self.user_rev, self.item_rev = None, None
         self.user_nbr, self.item_nbr = None, None
@@ -57,6 +60,20 @@ class DataLoader:
         self.train_instances = None
         self.train_batch_num, self.test_batch_num = 0, 0
         self.__load_traintest_data()
+
+        self.bert = None
+        self.__load_bert()
+
+        self.user_rev_enc = {}
+        self.item_rev_enc = {}
+    
+    def __load_bert(self):
+        self.bert = BertModel.from_pretrained('google/bert_uncased_L-4_H-256_A-4')
+        self.bert.requires_grad_(False)
+        
+        if self.use_gpu:
+            self.bert = self.bert.cuda()
+
     
     def __load_user_item_reviews(self):
         """[private] load aggregated reviews for user/item
@@ -123,7 +140,7 @@ class DataLoader:
 
         print("[DataLoader] train/test data loading done!")
 
-    def get_batch_iterator(self, for_train=True):
+    def get_batch_iterator(self, epoch=0, for_train=True):
         """Batch getter
         Note: didn't do sampling here to a fixed size for user/item nbrs
         """
@@ -148,110 +165,118 @@ class DataLoader:
             instances = data_instances[i * bs: end_idx]
             
             # get user/item ids
-            users = np.array([int(ins.user_id[2:]) for ins in instances])
-            items = np.array([int(ins.item_id[2:]) for ins in instances])
+            users_list = [int(ins.user_id[2:]) for ins in instances]
+            items_list = [int(ins.item_id[2:]) for ins in instances]
             ratings = np.array([ins.rating for ins in instances])
 
             # change to tensor
-            users = torch.from_numpy(users)
-            items = torch.from_numpy(items)
+            users = torch.from_numpy(np.array(users_list))
+            items = torch.from_numpy(np.array(items_list))
             ratings = torch.from_numpy(ratings)
-
-            # get user/item neighbors
-            if self.use_neighbor:
-                user_nbrs = [self.user_nbr[ins.user_id] for ins in instances]
-                item_nbrs = [self.item_nbr[ins.item_id] for ins in instances]
-            else:
-                user_nbrs, item_nbrs = None, None
 
             # get user/item reviews
             user_revs = [self.user_rev[ins.user_id] for ins in instances]
             item_revs = [self.item_rev[ins.item_id] for ins in instances]
 
-            # sampling the user_revs and item_revs
-
-            # === new below ===
-            # batch.urev, batch.irev list of EntityReviewAggregation
-            # u_split = torch.tensor([x.get_rev_size() for x in user_revs], dtype=torch.int)
-            # i_split = torch.tensor([x.get_rev_size() for x in item_revs], dtype=torch.int)
-
-            # u_split = torch.tensor([self.__get_sample_size(x.get_rev_size()) 
-            #     for x in user_revs], dtype=torch.int)
-            # i_split = torch.tensor([self.__get_sample_size(x.get_rev_size()) 
-            #     for x in item_revs], dtype=torch.int)
             u_split = [self.__get_sample_size(x.get_rev_size()) for x in user_revs]
             i_split = [self.__get_sample_size(x.get_rev_size()) for x in item_revs]
-
-            # contextualized encoder (bert) input_ids
-            # urevs_input_ids = [x.get_anno_tkn_revs()[0]['input_ids'] for x in user_revs] # list of (num_revs*pad_len)
-            # irevs_input_ids = [x.get_anno_tkn_revs()[0]['input_ids'] for x in item_revs] # list of (num_revs*pad_len)
-            # urevs_input_ids = torch.cat(urevs_input_ids, dim=0) # ttl_u_n_rev, padlen
-            # irevs_input_ids = torch.cat(irevs_input_ids, dim=0) # ttl_i_n_rev, padlen
             
-            # contextualized encoder (bert) attention masks
-            # urevs_attn_mask = [x.get_anno_tkn_revs()[0]['attention_mask'] for x in user_revs] #(num_revs*pad_len)
-            # irevs_attn_mask = [x.get_anno_tkn_revs()[0]['attention_mask'] for x in item_revs] #(num_revs*pad_len)
-            # urevs_attn_mask = torch.cat(urevs_attn_mask, dim=0) # ttl_u_n_rev, padlen
-            # irevs_attn_mask = torch.cat(irevs_attn_mask, dim=0) # ttl_i_n_rev, padlen
-
-
-            # aspect locations
-            # urevs_loc = torch.as_tensor(np.concatenate(
-            #     [x.toarray() for _rev in user_revs for x in _rev.get_anno_tkn_revs()[1]], 
-            #     axis=0), dtype=torch.float)
-            # irevs_loc = torch.as_tensor(np.concatenate(
-            #     [x.toarray() for _rev in item_revs for x in _rev.get_anno_tkn_revs()[1]], 
-            #     axis=0), dtype=torch.float)
-            
-            urevs_input_ids, urevs_attn_mask, urevs_loc = [], [], []
-            for x in user_revs:
+            urevs_loc = []
+            urevs_out_hid_list = []
+            urevs_pooler_list = []
+            for j, x in enumerate(user_revs):
                 input_, loc = x.get_anno_tkn_revs()
                 tmp_u_input_ids, tmp_u_attn_mask, tmp_u_loc = self.__get_sampled_reviews(
                     input_['input_ids'], input_['attention_mask'], loc)
-                urevs_input_ids.append(tmp_u_input_ids)
-                urevs_attn_mask.append(tmp_u_attn_mask)
+
+                if users_list[j] not in self.user_rev_enc:
+                    if self.use_gpu:
+                        tmp_u_input_ids = tmp_u_input_ids.cuda()
+                        tmp_u_attn_mask = tmp_u_attn_mask.cuda()
+                    tmp_u_enc = self.bert(tmp_u_input_ids, tmp_u_attn_mask)
+                    if self.ds != "automotive":
+                        tmp_u_enc_pool = tmp_u_enc[1].cpu()
+                        tmp_u_enc_outhid = tmp_u_enc[0].cpu()
+                    else:
+                        tmp_u_enc_pool = tmp_u_enc[1]
+                        tmp_u_enc_outhid = tmp_u_enc[0]
+                    self.user_rev_enc[users_list[j]] = {
+                        "pooler": tmp_u_enc_pool, "out_hid": tmp_u_enc_outhid}
+                    urevs_out_hid_list.append(tmp_u_enc_outhid)
+                    urevs_pooler_list.append(tmp_u_enc_pool)
+                else:
+                    urevs_out_hid_list.append(
+                        self.user_rev_enc[users_list[j]]['out_hid'])
+                    urevs_pooler_list.append(
+                        self.user_rev_enc[users_list[j]]['pooler'])
                 urevs_loc.append(tmp_u_loc)
-            urevs_input_ids = torch.cat(urevs_input_ids, dim=0)
-            urevs_attn_mask = torch.cat(urevs_attn_mask, dim=0)
+            
+
+            urevs_out_hid = torch.cat(urevs_out_hid_list, dim=0)
+            urevs_pooler = torch.cat(urevs_pooler_list, dim=0)
             urevs_loc = torch.as_tensor(np.concatenate(
                 [x.toarray() for _rev in urevs_loc for x in _rev], axis=0), dtype=torch.float)
 
-            irevs_input_ids, irevs_attn_mask, irevs_loc = [], [], []
-            for x in item_revs:
+            irevs_out_hid_list = []
+            irevs_pooler_list = []
+            irevs_loc = []
+            for j, x in enumerate(item_revs):
                 input_, loc = x.get_anno_tkn_revs()
                 tmp_i_input_ids, tmp_i_attn_mask, tmp_i_loc = self.__get_sampled_reviews(
                     input_['input_ids'], input_['attention_mask'], loc)
-                irevs_input_ids.append(tmp_i_input_ids)
-                irevs_attn_mask.append(tmp_i_attn_mask)
+                if items_list[j] not in self.item_rev_enc:
+                    if self.use_gpu:
+                        tmp_i_input_ids = tmp_i_input_ids.cuda()
+                        tmp_i_attn_mask = tmp_i_attn_mask.cuda()
+                    tmp_i_enc = self.bert(tmp_i_input_ids, tmp_i_attn_mask)
+                    if self.ds != "automotive":
+                        tmp_i_enc_pool = tmp_i_enc[1].cpu()
+                        tmp_i_enc_outhid = tmp_i_enc[0].cpu()
+                    else:
+                        tmp_i_enc_pool = tmp_i_enc[1]
+                        tmp_i_enc_outhid = tmp_i_enc[0]
+                    self.item_rev_enc[items_list[j]] = {
+                        "pooler": tmp_i_enc_pool, "out_hid": tmp_i_enc_outhid}
+                    irevs_out_hid_list.append(tmp_i_enc_outhid)
+                    irevs_pooler_list.append(tmp_i_enc_pool)
+                else:
+                    irevs_out_hid_list.append(
+                        self.item_rev_enc[items_list[j]]['out_hid'])
+                    irevs_pooler_list.append(
+                        self.item_rev_enc[items_list[j]]['pooler'])
                 irevs_loc.append(tmp_i_loc)
-            irevs_input_ids = torch.cat(irevs_input_ids, dim=0)
-            irevs_attn_mask = torch.cat(irevs_attn_mask, dim=0)
+
+            irevs_out_hid = torch.cat(irevs_out_hid_list, dim=0)
+            irevs_pooler = torch.cat(irevs_pooler_list, dim=0)
             irevs_loc = torch.as_tensor(np.concatenate(
                 [x.toarray() for _rev in irevs_loc for x in _rev], axis=0), dtype=torch.float)
+            
+            # u_pooler, i_pooler, u_out_hid, i_out_hid = None, None, None, None
+            # if epoch > 0:
+            #     u_pooler_list = [self.user_rev_enc[id_]['pooler'] for id_ in users_list]
+            #     u_pooler = torch.cat(u_pooler_list, dim=0)
+            #     i_pooler_list = [self.item_rev_enc[id_]['pooler'] for id_ in items_list]
+            #     i_pooler = torch.cat(i_pooler_list, dim=0)
 
-
-            # === new above ===
-
-            # move to devices
-            # if self.use_gpu:
-            #     self.__move_rev_to_device(user_revs)
-            #     self.__move_rev_to_device(item_revs)
-
-            batch = {"uid": users, 
+            #     u_out_hid_list = [self.user_rev_enc[id_]['out_hid'] for id_ in users_list]
+            #     u_out_hid = torch.cat(u_out_hid_list, 0)
+            #     i_out_hid_list = [self.item_rev_enc[id_]['out_hid'] for id_ in items_list]
+            #     i_out_hid = torch.cat(i_out_hid_list, 0)
+            
+            batch = {"uid_list": users_list,
+                     "iid_list": items_list,
+                     "uid": users, 
                      "iid": items,
                      "rtg": ratings,
-                     "urevs_input_ids": urevs_input_ids, 
-                     "irevs_input_ids": irevs_input_ids,
-                     "urevs_attn_mask": urevs_attn_mask,
-                     "irevs_attn_mask": irevs_attn_mask,
                      "urevs_loc": urevs_loc,
                      "irevs_loc": irevs_loc,
                      "u_split": u_split,
-                     "i_split": i_split
+                     "i_split": i_split,
+                     "u_pooler": urevs_pooler,
+                     "i_pooler": irevs_pooler,
+                     "u_out_hid": urevs_out_hid,
+                     "i_out_hid": irevs_out_hid
             }
-
-            # if self.use_gpu:
-            #     self.__move_rev_to_device(batch)
             
             yield batch
     
@@ -289,4 +314,21 @@ class DataLoader:
             loc = new_loc
             
         return input_ids, attn_mask, loc
+    
 
+    def update_review_enc(self, id_list, pooler_list, out_hid_list, for_user=True):
+        """
+        id_list - 1-D numpy array of ID lists
+        pooler_list - list of tensor of pooler state
+        out_hid_list - output_hidden_state
+        """
+        dict_to_update = self.user_rev_enc if for_user else self.item_rev_enc
+        
+        for idx, id_ in enumerate(id_list):
+            if id_ not in dict_to_update:
+                dict_to_update[id_] = {"pooler": pooler_list[idx],
+                                       "out_hid": out_hid_list[idx]}
+    
+    def get_cached_count(self):
+        return len(self.user_rev_enc), len(self.item_rev_enc)
+    

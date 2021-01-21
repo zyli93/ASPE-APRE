@@ -258,9 +258,7 @@ python src/extract.py --data_path=./data/amazon/sports_outdoors/ --count_thresho
 
 ### Aspect and Opinion Extractor with ML models
 
-#### SDRN
-
-We managed to run `SDRN`, a Bert-based model for aspect and sentiment co-extraction. We carefully record the procedure for reproduction.
+We managed to run `SDRN`, a Bert-based model for aspect and sentiment co-extraction. We carefully record the procedure for reproduction. __NOTE__: If trained models are already available, please jump to step 8!
 
 1. Clone the repo from GitHub: https://github.com/NKU-IIPLab/SDRN. Many thanks for sharing the code!
 2. Install PyTorch 0.4.1.

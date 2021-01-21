@@ -25,16 +25,12 @@ from collections import deque
 
 from dataloader import DataLoader
 from model import APRE
+from transformers import BertModel
 from postprocess import EntityReviewAggregation
 
 from utils import get_time, check_memory, print_args, make_dir
 
-"""
-TODO: don't forget to use model.train() and model.eval()
-"""
-
-# TODO: initialize Linear!!!
-# TODO: whether to use dropout!!!
+# TODO: change ep==0 to set-in condition
 
 # Arguments parser
 parser = argparse.ArgumentParser()
@@ -77,10 +73,14 @@ parser.add_argument("--num_user", type=int, required=True, help="Number of users
 parser.add_argument("--num_item", type=int, required=True, help="Number of items.")
 parser.add_argument("--feat_dim", type=int, default=128, help="Intermediate layer size of the final MLP")
 parser.add_argument("--regularization_weight", type=float, default=0.0001, help="Regularization weight of the model")
-parser.add_argument("--num_last_layers", type=int, default=4, help="Number of last layers embedding to use in BERT.")
-parser.add_argument("--ex_attn_temp", type=float, default=1.0, help="Explicit temperature of review attention weights.")
-parser.add_argument("--im_attn_temp", type=float, default=1.0, help="Implicit temperature of review attention weights.")
+# parser.add_argument("--num_last_layers", type=int, default=4, help="Number of last layers embedding to use in BERT.")
 parser.add_argument("--max_review_num", type=int, default=30, help="Maximum number of reviews to sample")
+parser.add_argument("--dropout", type=float, default=0.2, help="Dropout Rate.")
+parser.add_argument("--cnn_out_channel", type=int, default=100, help="CNN output channel")
+parser.add_argument("--transf_wordemb_func", type=str, default="else", help="embedding activation")
+parser.add_argument("--im_kernel_size", type=int, default=3, help="CNN kernel size for implicit channel.")
+parser.add_argument("--scheduler_stepsize", type=int, default=5, help="Lr scheduler step size")
+parser.add_argument("--scheduler_gamma", type=float, default=0.8, help="Lr scheduler gamma")
 
 
 # save model configeration
@@ -115,23 +115,24 @@ def get_optimizer(model):
 
 
 def move_batch_to_gpu(batch):
+    not_cuda = set(['uid_list', 'iid_list', 'u_split', 'i_split'])
     for tensor_name, tensor in batch.items():
-        if tensor_name != "u_split" and tensor_name != "i_split":
+        if tensor_name not in not_cuda:
             batch[tensor_name] = tensor.cuda()
     return batch
 
 
-def train(model, dataloader):
+def train(args, model, dataloader):
 
     logging.info("[info] start training ID:[{}]".format(args.experimentID))
     print("[train] started training, ID:{}".format(args.experimentID))
 
-    # sliding avg container
-    dq = deque([], maxlen=50)
-    clamp_dq = deque([], maxlen=50)
-
     # optimizer
     optimizer = get_optimizer(model)
+    
+    # optimizer scheduler
+    scheduler = optim.lr_scheduler.StepLR(
+        optimizer, step_size=args.scheduler_stepsize, gamma=args.scheduler_gamma)
 
     # loss function
     criterion = nn.MSELoss()
@@ -148,6 +149,8 @@ def train(model, dataloader):
         model.train()  # model training flag
 
         total_loss = 0
+        print("{} [Time] Starting Epoch {}".format(get_time(), ep))
+        logging.info("[Time] Starting Epoch {}".format(ep))
         for idx, batch in enumerate(trn_iter):
             total_num_iter_counter += 1
 
@@ -158,7 +161,6 @@ def train(model, dataloader):
             # make pred
             pred = model(batch)
 
-
             # get ground truth, convert to float tensor
             target = batch['rtg'].float()
 
@@ -168,14 +170,6 @@ def train(model, dataloader):
             # build loss term
             loss = criterion(pred, target)
 
-            clamp_loss = torch.mean((torch.clamp(pred, 1.0, 5.0) - target)**2).item()
-
-            dq.append(loss.item())
-            sliding_perf = sum(dq) / len(dq)
-
-            clamp_dq.append(clamp_loss)
-            clamp_sliding_perf = sum(clamp_dq) / len(clamp_dq)
-
             # optimization
             loss.backward()
             optimizer.step()
@@ -183,19 +177,21 @@ def train(model, dataloader):
             total_loss += loss.item()
 
             # log model
-            if idx > 0 and idx % args.log_iter_num == 0:
-                msg = "ep:[{}] iter:[{}/{}] loss:[{:.4f}] RawLoss:[{:.3f}] ClampLoss:[{:.3f}]".format(
-                    ep, idx, total_num_iter_per_epoch, loss.item(), sliding_perf, clamp_sliding_perf)
+            cached_count = dataloader.get_cached_count()
+            if idx % args.log_iter_num == 0:
+                msg = "ep:[{}] iter:[{}/{}] loss:[{:.4f}] [{},{}]".format(
+                    ep, idx, total_num_iter_per_epoch, loss.item(), cached_count[0], cached_count[1])
                 logging.info("[Perf][Iter] " + msg)
                 print("{} [Perf][Iter] {}".format(get_time(), msg))
             
             # HARD CODE HERE
-            if loss.item() > 2. and ep > args.eval_after_epoch_num:
+            if loss.item() > 2. and ep >= args.eval_after_epoch_num:
                 pred_str = ", ".join(["{:.2f}".format(x) for x in pred])
                 target_str = ", ".join(["{:.2f}".format(x) for x in target])
                 logging.info("[Perf][Iter][Abnormal] [{}], [{}]".format(pred_str, target_str))
 
-                
+        scheduler.step()        
+
         # avg loss this ep
         msg = "ep:[{}] iter:[{}] avgloss:[{:.6f}]".format(
             ep, total_num_iter_counter, total_loss / total_num_iter_per_epoch)
@@ -214,7 +210,8 @@ def train(model, dataloader):
             print("{} [Perf][Test] {}".format(get_time(), msg))
 
         # save model
-        if args.save_model and not ep % args.save_epoch_num \
+        
+        if False and args.save_model and not ep % args.save_epoch_num \
             and ep >= args.save_after_epoch_num - 1:
             model_name = "model_ExpID{}_EP{}".format(args.experimentID, ep)
             torch.save(model.state_dict(), args.save_model_path + model_name)
@@ -230,7 +227,7 @@ def evaluate(model, test_dl, rooted=False, restore_model_path=None):
     if restore_model_path:
         model.load_state_dict(torch.load(restore_model_path))
     with torch.no_grad():
-        for test_batch in test_dl:
+        for i, test_batch in enumerate(test_dl):
             test_batch = move_batch_to_gpu(test_batch)
             test_pred = model(test_batch)
             test_pred_clamp = torch.clamp(test_pred, 1.0, 5.0)
@@ -239,7 +236,7 @@ def evaluate(model, test_dl, rooted=False, restore_model_path=None):
             full_pred.append(test_pred.cpu().detach().numpy())
             full_pred_clamp.append(test_pred_clamp.cpu().detach().numpy())
             full_target.append(test_target.cpu().detach().numpy())
-        
+    
     full_test_pred = np.concatenate(full_pred)
     full_test_target = np.concatenate(full_target)
     full_test_pred_clamp = np.concatenate(full_pred_clamp)
@@ -262,7 +259,7 @@ if __name__ == "__main__":
         format='[%(asctime)s][%(levelname)s][%(filename)s] %(message)s', 
         datefmt='%m/%d/%Y %H:%M:%S')
     
-    # setup gpu
+    # Setup GPU device
     if torch.cuda.device_count() > 0:
         use_gpu = True
         assert torch.cuda.device_count() > args.gpu_id
@@ -282,17 +279,18 @@ if __name__ == "__main__":
     torch.manual_seed(args.random_seed)
     np.random.seed(args.random_seed)
 
-    model = APRE(args)
+    dataloader = DataLoader(dataset=args.dataset, shuffle=args.shuffle,
+        batch_size=args.batch_size, max_sample_num=args.max_review_num, 
+        use_gpu=use_gpu)
 
     # move model to cuda device
-    if torch.cuda.is_available():
+    model = APRE(args)
+    if use_gpu:
         model = model.cuda()
 
-    dataloader = DataLoader(dataset=args.dataset, shuffle=args.shuffle,
-        batch_size=args.batch_size, max_sample_num=args.max_review_num)
     
     if args.task == "train" or args.task == "both":
-        train(model, dataloader)
+        train(args, model, dataloader)
     elif args.task == "test":
         evaluate(model, test_dl=dataloader.get_batch_iterator(for_train=False),
             restore_model_path=args.load_model_path)

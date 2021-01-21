@@ -48,13 +48,16 @@ def sent_length(df):
 if __name__ == "__main__":
     # names = ["video_games", "sports_outdoors", "office_products", 
             #  "home_kitchen", "pet_supplies"]
-    names = ["automotive", "sports_outdoors", "digital_music", 
-             "toys_games", "pet_supplies"]
+    # names = ["automotive", "sports_outdoors", "digital_music", 
+    #          "toys_games", "pet_supplies"]
+    # names = ['musical_instruments']
+    names = ['tools_home']
     if False:
         for name in names:
             pandarallel.initialize(
                 nb_workers=16,
                 progress_bar=True,
+                use_memory_fs=False,
                 verbose=1)
             print("loading {}".format(name))
             df, _ = load_df(name)
@@ -117,7 +120,7 @@ if __name__ == "__main__":
         trn_item_ser = df['item_id'].apply(lambda x: int(x[2:]))
         print(trn_item_ser.max(), trn_item_ser.min())
     
-    elif True:
+    elif False:
         for name in names:
             print(name)
             df, test_df = load_df(name)
@@ -130,6 +133,7 @@ if __name__ == "__main__":
             print("")
     else:
         for name in names:
+            print(name)
             df, test_df = load_df(name)
             print("test dataframe, before shape {}".format(test_df.shape))
             trn_user = set(df['user_id'].unique())

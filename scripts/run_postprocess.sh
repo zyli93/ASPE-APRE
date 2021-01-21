@@ -13,3 +13,6 @@ python src/postprocess.py --data_path=./data/amazon/sports_outdoors/ --num_aspec
 # toys_games
 python src/postprocess.py --data_path=./data/amazon/toys_games/ --num_aspects 680 --n_partition 1 --num_workers 16
 
+# tools_home
+python src/postprocess.py --data_path=./data/amazon/tools_home/ --num_aspects 659 --n_partition 1 --num_workers 1
+
