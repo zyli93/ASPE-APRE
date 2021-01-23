@@ -50,8 +50,8 @@ if __name__ == "__main__":
             #  "home_kitchen", "pet_supplies"]
     # names = ["automotive", "sports_outdoors", "digital_music", 
     #          "toys_games", "pet_supplies"]
-    # names = ['musical_instruments']
-    names = ['tools_home']
+    names = ['musical_instruments']
+    # names = ['tools_home']
     if False:
         for name in names:
             pandarallel.initialize(
@@ -108,17 +108,17 @@ if __name__ == "__main__":
 
             print("num user {}, num_item {}".format(len(trn_user), len(trn_item)))
     elif False:
-        name = "digital_music"
-        df, test_df = load_df(name)
-        print(df['user_id'].nunique())
-        print(test_df['user_id'].nunique())
-        trn_user_ser = df['user_id'].apply(lambda x: int(x[2:]))
-        print(trn_user_ser.max(), trn_user_ser.min())
+        for name in names:
+            df, test_df = load_df(name)
+            print(df['user_id'].nunique())
+            print(test_df['user_id'].nunique())
+            trn_user_ser = df['user_id'].apply(lambda x: int(x[2:]))
+            print(trn_user_ser.max(), trn_user_ser.min())
 
-        print(df['item_id'].nunique())
-        print(test_df['item_id'].nunique())
-        trn_item_ser = df['item_id'].apply(lambda x: int(x[2:]))
-        print(trn_item_ser.max(), trn_item_ser.min())
+            print(df['item_id'].nunique())
+            print(test_df['item_id'].nunique())
+            trn_item_ser = df['item_id'].apply(lambda x: int(x[2:]))
+            print(trn_item_ser.max(), trn_item_ser.min())
     
     elif False:
         for name in names:

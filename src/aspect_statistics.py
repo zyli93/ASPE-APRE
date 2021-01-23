@@ -9,12 +9,15 @@ from extract import COL_AS_PAIRS_IDX
 #     "video_games",
 #     "pet_supplies"]
 
+# dataset_names = [
+#     "automotive",
+#     "digital_music",
+#     "pet_supplies",
+#     "sports_outdoors",
+#     "toys_games"]
+
 dataset_names = [
-    "automotive",
-    "digital_music",
-    "pet_supplies",
-    "sports_outdoors",
-    "toys_games"]
+    "musical_instruments", "tools_home"]
 
 # dataset_names = [
 #     "digital_music"]

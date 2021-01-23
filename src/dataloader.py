@@ -194,7 +194,7 @@ class DataLoader:
                         tmp_u_input_ids = tmp_u_input_ids.cuda()
                         tmp_u_attn_mask = tmp_u_attn_mask.cuda()
                     tmp_u_enc = self.bert(tmp_u_input_ids, tmp_u_attn_mask)
-                    if self.ds != "automotive":
+                    if self.ds != "automotive" and self.ds != "musical_instruments":
                         tmp_u_enc_pool = tmp_u_enc[1].cpu()
                         tmp_u_enc_outhid = tmp_u_enc[0].cpu()
                     else:

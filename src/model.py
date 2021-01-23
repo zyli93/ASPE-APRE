@@ -409,8 +409,11 @@ class APRE(nn.Module):
         #   Result: (bs, 2*im_dim)
         # [linear]
         #   Input: (see above); Output: (bs, 1)
-        pred = self.b_u(batch_uid) + self.b_t(batch_iid) + \
-            self.im_mlp(torch.cat((u_impl_repr, i_impl_repr), dim=-1))
+        pred = self.b_u(batch_uid) + self.b_t(batch_iid)
+
+        if self.use_imp:
+            pred += self.im_mlp(torch.cat((u_impl_repr, i_impl_repr), dim=-1))
+        
         pred = pred.squeeze()  # (bs)
 
         # [cat]
@@ -428,8 +431,9 @@ class APRE(nn.Module):
         # [squeeze]
         #   Input: (see above); Output: (bs)
 
-        pred += torch.matmul(
-            self.ex_mlp(torch.cat((u_expl_repr, i_expl_repr), dim=-1)).squeeze(), 
-            torch.unsqueeze(self.gamma, 1)).squeeze()
+        if self.use_exp:
+            pred += torch.matmul(
+                self.ex_mlp(torch.cat((u_expl_repr, i_expl_repr), dim=-1)).squeeze(), 
+                torch.unsqueeze(self.gamma, 1)).squeeze()
 
         return pred

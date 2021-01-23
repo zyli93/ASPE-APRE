@@ -6,3 +6,4 @@ python src/extract.py --data_path=./data/amazon/sports_outdoors/ --count_thresho
 
 python src/extract.py --data_path=./data/amazon/toys_games/ --count_threshold=150
 python src/extract.py --data_path=./data/amazon/tools_home --count_threshold=150
+python src/extract.py --data_path=./data/amazon/musical_instruments/ --count_threshold=50

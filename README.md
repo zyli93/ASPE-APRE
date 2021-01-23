@@ -20,6 +20,8 @@ Rating prediction with Unsupervised Aspect-level Review Analysis (RUARA)
 - [x] use higher dimension of glove
 - [ ] add `get_prereq_ready.sh` instructions
 - [ ] for SDRN, remove `run_inference_xxx.sh` files and only keep the `run_inference.sh`.
+- [ ] add `run_extract.sh` instructions
+- [ ] re-org the README
 
 ## Data and External Resources
 

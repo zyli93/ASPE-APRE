@@ -1,10 +1,10 @@
-python src/train.py --experimentID 8844 \
-    --gpu_id $1 \
+python src/train.py --experimentID $1 \
+    --gpu_id $2 \
     --task both \
     --dataset automotive \
     --shuffle \
-    --batch_size 30 \
-    --learning_rate 0.0003 \
+    --batch_size 20 \
+    --learning_rate 0.001 \
     --num_epoch 20 \
     --eval_epoch_num 1 --eval_after_epoch_num 5 \
     --log_iter_num 1 \

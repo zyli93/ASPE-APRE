@@ -211,7 +211,7 @@ def train(args, model, dataloader):
 
         # save model
         
-        if False and args.save_model and not ep % args.save_epoch_num \
+        if args.save_model and not ep % args.save_epoch_num \
             and ep >= args.save_after_epoch_num - 1:
             model_name = "model_ExpID{}_EP{}".format(args.experimentID, ep)
             torch.save(model.state_dict(), args.save_model_path + model_name)
