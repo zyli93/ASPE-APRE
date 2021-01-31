@@ -48,10 +48,10 @@ def sent_length(df):
 if __name__ == "__main__":
     # names = ["video_games", "sports_outdoors", "office_products", 
             #  "home_kitchen", "pet_supplies"]
-    # names = ["automotive", "sports_outdoors", "digital_music", 
-    #          "toys_games", "pet_supplies"]
-    names = ['musical_instruments']
-    # names = ['tools_home']
+    names = ["automotive", "sports_outdoors", "digital_music", 
+             "toys_games", "pet_supplies"]
+    names += ['musical_instruments']
+    names += ['tools_home']
     if False:
         for name in names:
             pandarallel.initialize(
@@ -131,6 +131,10 @@ if __name__ == "__main__":
             print(list(range(50, 101, 5)))
             print(np.percentile(rpt.to_numpy(), range(50, 101, 5)))
             print("")
+    elif True:
+        for name in names:
+            _, test_df = load_df(name)
+            print("name {}, shape {}".format(name, test_df.shape[0]))
     else:
         for name in names:
             print(name)

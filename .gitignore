@@ -175,3 +175,9 @@ src/not_used
 
 # ckpt directory
 ckpt/
+
+# case study directory
+case_study/
+
+# remove irrelavent files
+not_submit/

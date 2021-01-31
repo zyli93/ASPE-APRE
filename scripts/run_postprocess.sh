@@ -16,3 +16,6 @@ python src/postprocess.py --data_path=./data/amazon/toys_games/ --num_aspects 68
 # tools_home
 python src/postprocess.py --data_path=./data/amazon/tools_home/ --num_aspects 659 --n_partition 1 --num_workers 1
 
+# musical_instruments
+python src/postprocess.py --data_path=./data/amazon/musical_instruments/ --num_aspects 167 --n_partition 1 --num_workers 1
+

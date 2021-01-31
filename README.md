@@ -1,52 +1,24 @@
-# ruara
-Rating prediction with Unsupervised Aspect-level Review Analysis (RUARA)
+# ASPE + APRE
+Aspect-Sentiment Pair Extractor (ASPE) and Attention-Property-aware Rating Estimator (APRE)
 
-## The TODO list
-
-- [x] implement user review aggregation and item review aggregation for Amazon & Yelp (in annotate.py)
-- [x] add dependency info for nlp toolkits such as nltk and spaCy
-- [x] check if the strings need better processing?
-- [x] filter out too long or too short reviews
-- [x] pmi compute error in TagGCN because `combinations()` doesn't consider order
-- [x] preprocessing code cannot deal with text = `NaN`
-- [x] put in note that order by speed: 
-    nothing > clean_str w/o spellcheck (sc) > clean_str w/ sc
-- [x] another package `autocorrect` works faster than SpellChecker
-- [x] maybe the original text should also be kept for Dependency Parsing.
-- [x] add discussion about window size
-- [x] add example of result of PMI annotation
-- [x] add notes for deleting RB and using JJ only
-- [x] add gensim with glove embedding
-- [x] use higher dimension of glove
-- [ ] add `get_prereq_ready.sh` instructions
-- [ ] for SDRN, remove `run_inference_xxx.sh` files and only keep the `run_inference.sh`.
-- [ ] add `run_extract.sh` instructions
-- [ ] re-org the README
-
+This document introduces how to reproduce the experiments of ASPE + APRE.
 ## Data and External Resources
 
-We use the following datasets: Amazon, Yelp, and Goodread.
+We use the following datasets: Amazon
 Two external resources are also required: GloVe pretrained word vectors and BERT pretrained parameters.
 
 ### Where to find them?
 
 * Amazon datasets can be found [here](https://nijianmo.github.io/amazon/index.html). Many thanks to the managing team!
-* Yelp dataset can be found [here](https://www.yelp.com/dataset). Many thanks to Yelp for sharing the invaluable database!
 * GloVe: See [GloVe](###GloVe) for details.
-* BERT: See [BERT's GitHub](https://github.com/google-research/bert) to download BERT pretrained parameters, configurations, and vocabulary.
 
 ### Unzip and rename.
 
 #### Amazon
 We used the 5-core version. The downloaded files are in the `.json.gz` extension. After decompressing, a json file will be obtained (e.g., `Office_Products_5.json.gz` to `Office_Products_5.json`). Please rename it to `office_products.json` and move it to `raw_datasets/amazon/office_products.json` since the preprocessing pipeline will locate the files to process by names. In this case, the `office_products` should be given to the `--amazon_subset` flag.
 
-#### Yelp
-We used the plain version of Yelp dataset and generate its 5-core
-
-
 ### GloVe
 GloVe is a pre-trained embedding vector popularly used for a wide range of NLP tasks.
-We use GloVe as the second filter of PMI sentiment term extraction.
 GloVe can be downloaded from [here](https://nlp.stanford.edu/projects/glove/). 
 And after downloading, please place it in `./glove` and then run 
 ```bash
@@ -54,11 +26,16 @@ python src/reformat_glove.py
 ```
 
 
+## Prerequisites
 
+### (Prerequisite 1) Install dependencies
 
-## Run Ruara
-
-### Install dependencies
+#### ALL IN ONE!
+Please run this single command to download and install all Python packages, NLTK packages, and spaCy dependencies.
+```bash
+bash scripts/get_prereq_ready.sh
+```
+You will see so many lines are being printed out. If no errors, go ahead to [Data Preprocessing](#Preprocessing). If you are interested what have been installed to your Python environment, please finish this section.
 
 #### Dependencies for Python and PyTorch
 Ruara is implement by Python and PyTorch. For a one-click complete installment of all Python dependencies. Please run
@@ -83,7 +60,7 @@ pip install -r requirements.txt
     ```
 
 
-### Preprocessing
+### (Prerequisite 2) Preprocessing
 
 To preprocess the data, run the `preprocessing.py` to do the job. Use the following command to see the help info.
 ```bash
@@ -116,21 +93,29 @@ python src/preprocess.py --amazon_subset=digital_music
 
 **Note**: We noticed that there exist words which are misspelled and can damage the PMI for aspect words. 
 
-### Prepare for NN-based and Lexicon-based extraction
-**TODO**: fill in content
+## ASPE
 
+After preprocessing, we will arrive at the ASPE part. This work is done by the following steps:
+1. Annotate text with the NN-based model (SDNR in our example)
+2. Prepare the Sentiment lexicon
+3. Use `annotate.py` to build PMI and merge the three sets to build $ST$.
+4. Use `extract.py` to build AS-candidates and eventually AS-pairs.
+### NN-based aspect-sentiment term co-extraction.
+Please see instructions for [SDRN](#NN-based-Aspect-and-Opinion-Extractor).
+
+### and Lexicon-based extraction
+The lexicon has been included in this package. Please refer to `./configs/opinion-lexicon-English`. Well, you don't need to do anything for this step.
 
 ### Unsupervised aspect annotation
 
-We run `annotate.py` to do the job. The `annotate.py` is in charge of the following tasks:
+We run `annotate.py` to build PMI and merge the three sets to build $ST$. In detail, the `annotate.py` is in charge of the following tasks:
 1. Compute P(w_i, w_j) and P(w_i).
 2. Compute PMI for each word in the corpus.
 3. Load sentiment terms extracted by the NN-based and Lexicon-based methods.
-4. Use dependency parsing technique to find aspect-sentiment pair candidates. (AS-pairs)
-5. Save extracted AS-pairs.
+4. Use dependency parsing technique to find aspect-sentiment pair candidates. (AS-cand)
+5. Save extracted AS-cand.
 
- Detailed instructions are below.
-
+[HELP] Detailed instructions are below.
 ```text
 usage: annotate.py [-h] --path PATH --sdrn_anno_path SDRN_ANNO_PATH
                    [--pmi_window_size PMI_WINDOW_SIZE]
@@ -139,6 +124,7 @@ usage: annotate.py [-h] --path PATH --sdrn_anno_path SDRN_ANNO_PATH
                    [--use_senti_word_list] [--glove_dimension GLOVE_DIMENSION]
                    [--multi_proc_dep_parsing]
                    [--num_workers_mp_dep NUM_WORKERS_MP_DEP]
+                   [--do_compute_pmi]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -163,57 +149,53 @@ optional arguments:
                         will be enabled.
   --num_workers_mp_dep NUM_WORKERS_MP_DEP
                         Number of workers to be spinned off for multiproc dep
-                        parsing..
+                        parsing.
+  --do_compute_pmi      Whether to redo pmi computation
 ```
 
-Here's an example for parsing the _Digital Music_ dataset for Amazon.
+[EXAMPLE] Here's an example for parsing the _Digital Music_ dataset for Amazon.
 ```
 bash scripts/run_annotate.sh digital_music
 ```
+But please pay attention to the `--do_compute_pmi` flag. When you first run this model, please enable this flag as it will execute the compute PMI for you. You will see below that it save the PMI terms after it run once so that next time you don't waste time running it again.
 
-Here's the detailed annotation pipeline of PMI in `annotate.py`:
-
-1. Load dataset and hard-coded files: POS tags as filters of aspect sentiment (`fine_grained.pos.json`) and seed words for sentiment words (`seed_words.json`).
-2. Compute PMI of existing word pairs in the corpus.
-3. Run POS tagging provided by NLTK and take the most popular POS as a words POS.
-4. Compute modifier words' polarity using the method in SKEP. Only `JJ` are considered modifiers. Refer to `./configs/fine_grained.pos.json`.
-5. Remove the tokens that aren't valid words.
-
-Here are the top 15 sentiment words extracted by our PMI-based method. We can see most words are quick possitive. But two types of outliers exsit in this list. One, non-words (i.e., "ur"). Two, negative words (i.e., "reckless"). The existence of negative words is strongly due to the certain selection of seeds.
-```
-word            ,POS ,polarity                ,Mean Positive PMI      ,Mean Negative PMI
-clear           ,JJ  ,0.5840987462540387      ,-0.19650273081066164   ,-0.7806014770647003
-great           ,JJ  ,0.5489023712339772      ,-0.20450911693587362   ,-0.7534114881698508
-believable      ,JJ  ,0.486272530389566       ,0.486272530389566      ,0.0
-good            ,JJ  ,0.48500002838557305     ,0.022995079620155488   ,-0.46200494876541753
-excellent       ,JJ  ,0.35263876072657313     ,-0.3218579276588113    ,-0.6744966883853845
-ur              ,JJ  ,0.34734304468895105     ,0.36018580798898425    ,0.012842763300033195
-unbelievable    ,JJ  ,0.3467458825426481      ,0.2899629017690204     ,-0.056782980773627714
-mushy           ,JJ  ,0.3212031175587027      ,0.42669711225563556    ,0.10549399469693288
-reckless        ,JJ  ,0.26206888751325863     ,0.3109020229148935     ,0.04883313540163484
-amazing         ,JJ  ,0.2589900139290045      ,-0.37184520235735957   ,-0.6308352162863641
-beautiful       ,JJ  ,0.25721300991552554     ,-0.5456226782054189    ,-0.8028356881209444
-nice            ,JJ  ,0.2568078689974637      ,-0.20424132281965768   ,-0.4610491918171214
-much            ,JJ  ,0.23952869087514955     ,-0.23410520554168252   ,-0.47363389641683207
-awesome         ,JJ  ,0.22824133572268956     ,-0.2510182876984033    ,-0.47925962342109285
-```
-
-Most important results `annotate.py` generates:
+[OUTPUT] Most important results `annotate.py` generates:
 1. `train_data_dep.pkl`: the pickle file of dataframe with a column containing `spacy.doc` objects.
 2. `pmi_senti_terms.pkl`: sentiment terms extracted by PMI methods.
 
-**Notes and Discussions**:
- 1. If `--pmi_window_size` is increased, then `--token_min_count` should be increased as well to remove rare tokens. Usually, these rare tokens come from 
-  misspelling of users of review sites.
-
-
-### Aspect-sentiment term co-extraction
+### Filter invalid AS-cand using $ST$ to build AS-pair
 We use `extract.py` to filter useful aspects and convert aspects to index.
 
+[HELP] Below is the help information
+```text
+usage: extract.py [-h] --data_path DATA_PATH --count_threshold COUNT_THRESHOLD
+                  [--run_mapping]
 
+optional arguments:
+  -h, --help            show this help message and exit
+  --data_path DATA_PATH
+                        Path to the dataset.
+  --count_threshold COUNT_THRESHOLD
+                        Threshold of the count.
+  --run_mapping         If off, only get aspairs but do not work on df. For
+                        viewing use, cheaper.
+```
+Please check out the `count_threshold` of each dataset from the paper. `--run_mapping` is a flag to turn on/off the "real" heavy work. If used, the actual filtering is on. Otherwise, it only do the count-thresholding to remove the infrequent aspects.
+
+[EXAMPLE] Please find example for building AS-pairs for `extract.py` below
+```bash
+bash scripts/run_extract.sh
+```
+Please note that this file takes care of all seven datasets. Make sure you want all of them, or the unwanted ones are commented out.
+
+[OUTPUT] Most important results `extract.py` generates:
+1. `train_data_aspairs.pkl`: all information needed for training.
+2. `aspcat_counter.pkl`, `aspcat2idx,pkl`, `idx2aspcat.pkl`, and `asp2aspcat.pkl`: some useful pickles that stores the aspect to ID and ID to aspects. (Implementation related only)
 
 ### Prepare for Training
-We use `postprocess.py` to prepare the data for training. We understand some work can be done ahead of time so that it can save sometime. Especially for finding the locations of the sentiment terms.
+We are almost there!!! In order to speed up the training, we tokenize the text beforehand. We use `postprocess.py` to prepare the data for training. We understand some work can be done ahead of time so that it can save sometime. Especially for finding the locations of the sentiment terms.
+
+[HELP] Please find the useful information here.
 ```
 usage: postprocess.py [-h] --data_path DATA_PATH --num_aspects NUM_ASPECTS
                       [--max_pad_length MAX_PAD_LENGTH]
@@ -229,37 +211,26 @@ optional arguments:
                         Max length of padding. Default=100.
   --num_workers NUM_WORKERS
                         Number of multithread workers
+  --n_partition N_PARTITION
+                        Number of partitions for multiprocessing.
   --build_nbr_graph     Whether to build neighborhood graph.
 ```
-Number of aspects will be printed from `extract.py`. An example for digital music is 
+Number of aspects will be printed from `extract.py`. 
+
+[Example] An example for digital music is 
 ```
-python src/postprocess.py --data_path=./data/amazon/digital_music --num_aspects 604 
+python src/postprocess.py --data_path=./data/amazon/digital_music --num_aspects 296
 ```
-digital_music: 604
-vig (count threshold 200, 85866, 1311)
-hok (count threshold 200, 83305, 1253)
-pes (count threshold 100, 20246, 705)
-    (count threshold 50, 23328, 1110)
-ofp (count threshold 100, 54795, 1257)
+Or in a bash file:
+```bash
+bash scripts/run_postprocess.sh
+```
+Again, make sure you want all of them, or the unwanted ones are commented out. Another tip for the execution: for larger datasets, the only way to make it runable is to set both `--num_workers` and `--n_partition` to be 1.
 
-           count - #raw aspect - #aspect category
-automotive 50 - 4457 - 291
-digital_music 100 - 7499 - 296
-pet_supplies 150 - 18463 - 529
-toys_games 150 - 27562 - 680
-sports_outdoors 250 - 48738 - 747
-
-python src/extract.py --data_path=./data/amazon/automotive/ --count_threshold=50 --run_mapping
-python src/extract.py --data_path=./data/amazon/digital_music/ --count_threshold=100 --run_mapping
-python src/extract.py --data_path=./data/amazon/pet_supplies/ --count_threshold=150 --run_mapping
-python src/extract.py --data_path=./data/amazon/toys_games/ --count_threshold=150 --run_mapping
-python src/extract.py --data_path=./data/amazon/sports_outdoors/ --count_threshold=250 --run_mapping
-
-
+[OUTPUT] Most important results `extract.py` generates:
 ### Training
 
-### Aspect and Opinion Extractor with ML models
-
+### NN-based Aspect and Opinion Extractor 
 We managed to run `SDRN`, a Bert-based model for aspect and sentiment co-extraction. We carefully record the procedure for reproduction. __NOTE__: If trained models are already available, please jump to step 8!
 
 1. Clone the repo from GitHub: https://github.com/NKU-IIPLab/SDRN. Many thanks for sharing the code!
@@ -341,40 +312,6 @@ We managed to run `SDRN`, a Bert-based model for aspect and sentiment co-extract
 
     For `merge`, take output from the above step and merge the sentiment terms sets. Produce results to `./data/senti_term_[subset]_merged.pkl`.
 10. Until here, the SDRN term extraction is done. The generated file can be picked up by `annotate.py`.
-
-
-#### RINANTE
-
-Useful links:
-
-1. Two ways of saving models in TF
-    1. [Article 1](https://www.easy-tensorflow.com/tf-tutorials/basics/save-and-restore)
-    2. [Article 2](https://cv-tricks.com/tensorflow-tutorial/save-restore-tensorflow-models-quick-complete-tutorial/)
-
-
-Todo items:
-
-- [x] make sure the model setting is consistent with the parameter setting as the paper.
-- [ ] write code to save model
-- [ ] write code to run evaluation
-- [ ] find the best number of iterations
-
-
-### Dependency Parsing
-
-```text
-23.95% :::::::::                                |     3331 /    13909 |
-25.01% ::::::::::                               |     3479 /    13909 |
-23.51% :::::::::                                |     3270 /    13909 |
-75.50% ::::::::::::::::::::::::::::::           |    10501 /    13909 |
-23.71% :::::::::                                |     3298 /    13909 |
-24.85% :::::::::                                |     3456 /    13908 |
-23.22% :::::::::                                |     3229 /    13908 |
-25.44% ::::::::::                               |     3538 /    13908 |
-```
-
-
-### Run with Docker
 
 ## Appendix
 #### SDRN

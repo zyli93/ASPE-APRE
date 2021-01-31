@@ -29,6 +29,7 @@ from transformers import BertModel
 from postprocess import EntityReviewAggregation
 
 from utils import get_time, check_memory, print_args, make_dir
+from utils import move_batch_to_gpu
 
 # TODO: change ep==0 to set-in condition
 
@@ -65,10 +66,7 @@ parser.add_argument("--disable_explicit", action="store_true", default=False,
                     help="Flag to disable the explicit channel")
 parser.add_argument("--disable_implicit", action="store_true", default=False,
                     help="Flag to disable the implicit channel")
-parser.add_argument("--disable_cf", action="store_true", default=False, help="Flag to disable the CF channel")
 parser.add_argument("--num_aspects", type=int, required=True, help="Number of close-domain aspects in total")
-parser.add_argument("--aspemb_max_norm", type=int, default=-1,
-                    help="Max norm of aspect embedding. Set -1 for None.")
 parser.add_argument("--num_user", type=int, required=True, help="Number of users.")
 parser.add_argument("--num_item", type=int, required=True, help="Number of items.")
 parser.add_argument("--feat_dim", type=int, default=128, help="Intermediate layer size of the final MLP")
@@ -93,11 +91,6 @@ parser.add_argument("--save_after_epoch_num", type=int, default=1000,
 parser.add_argument("--save_model_path", type=str, default="./ckpt/",
                     help="Path to directory to save models")
 
-# evaluation configeration
-parser.add_argument("--eval_as_cls", action="store_true", default=False,
-                    help="Flag to round pred and eval as a classification task.")
-
-
 args = parser.parse_args()
 
 
@@ -113,13 +106,6 @@ def get_optimizer(model):
     else:
         raise ValueError("`optimizater` supported: adam/rmsprop")
 
-
-def move_batch_to_gpu(batch):
-    not_cuda = set(['uid_list', 'iid_list', 'u_split', 'i_split'])
-    for tensor_name, tensor in batch.items():
-        if tensor_name not in not_cuda:
-            batch[tensor_name] = tensor.cuda()
-    return batch
 
 
 def train(args, model, dataloader):

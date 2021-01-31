@@ -69,6 +69,20 @@ def check_memory():
     print('GPU memory: %.1f' % (torch.cuda.memory_allocated() // 1024 ** 2))
 
 
+def tensor_to_numpy(tensor, use_gpu):
+    if use_gpu:
+        tensor = tensor.cpu()
+    return tensor.detach().numpy()
+
+
+def move_batch_to_gpu(batch):
+    not_cuda = set(['uid_list', 'iid_list', 'u_split', 'i_split'])
+    for tensor_name, tensor in batch.items():
+        if tensor_name not in not_cuda:
+            batch[tensor_name] = tensor.cuda()
+    return batch
+
+
 # Training model helper functions
 
 def print_parameters(model):
@@ -287,7 +301,9 @@ def lemmatized_string(s):
 
 def print_args(args):
     not_print = set(
-        ['padded_length', "random_seed", "disable_cf", "aspemb_max_norm", "eval_as_cls"])
+        ['padded_length', 
+        "random_seed", 
+        "disable_cf", "aspemb_max_norm", "eval_as_cls"])
 
     print("")
     print("="* 70)

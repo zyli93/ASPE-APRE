@@ -229,6 +229,8 @@ class APRE(nn.Module):
             
             # User/Item Review-wise Aggregation for Aspects.
             uasp_repr_agg, iasp_repr_agg = [], []
+            ret_urev_attn_w = []
+            ret_irev_attn_w = []
             for i in range(len(u_split)):
                 # NOTE: method2 without concatenation
                 num_u_rev, num_i_rev = u_split[i], i_split[i]
@@ -280,6 +282,12 @@ class APRE(nn.Module):
                 
                 uasp_repr_agg.append(uasp_repr_revagg)
                 iasp_repr_agg.append(iasp_repr_revagg)
+
+                # [Case Study] 
+                # [squeeze]
+                #   (nrev, num_asp)
+                ret_urev_attn_w.append(urev_attn_w.squeeze())
+                ret_irev_attn_w.append(irev_attn_w.squeeze())
             
             # bs*num_asp* feat_dim
             # [stack]
@@ -431,8 +439,10 @@ class APRE(nn.Module):
         #   Input: (see above); Output: (bs)
 
         if self.use_exp:
-            pred += torch.matmul(
-                self.ex_mlp(torch.cat((u_expl_repr, i_expl_repr), dim=-1)).squeeze(), 
-                torch.unsqueeze(self.gamma, 1)).squeeze()
+            ex_mlp_out = self.ex_mlp(torch.cat((u_expl_repr, i_expl_repr), dim=-1)).squeeze()
+            pred += torch.matmul(ex_mlp_out, torch.unsqueeze(self.gamma, 1)).squeeze()
 
-        return pred
+        # ret_urev_attn_w: [list] bs * [(nrev, num_asp)]
+        # ret_irev_attn_w: [list] bs * [(nrev, num_asp)]
+        # ex_mlp_out: (bs, num_asp)
+        return pred, ret_urev_attn_w, ret_irev_attn_w, ex_mlp_out
