@@ -1,7 +1,6 @@
 # ASPE + APRE
-Aspect-Sentiment Pair Extractor (ASPE) and Attention-Property-aware Rating Estimator (APRE)
-
-This document introduces how to reproduce the experiments of ASPE + APRE.
+This is the repository for our ACL-IJCNLP 2021 submission: _Harnessing Item Recommendation with Aspect-based Sentiment Analysisand Unsupervised Term Co-Extraction_.
+Procedures implemented in this repo are Aspect-Sentiment Pair Extractor (ASPE) and Attention-Property-aware Rating Estimator (APRE). This document introduces how to reproduce the experiments of ASPE + APRE.
 ## Data and External Resources
 
 We use the following datasets: Amazon
@@ -102,8 +101,9 @@ After preprocessing, we will arrive at the ASPE part. This work is done by the f
 4. Use `extract.py` to build AS-candidates and eventually AS-pairs.
 ### NN-based aspect-sentiment term co-extraction.
 Please see instructions for [SDRN](#NN-based-Aspect-and-Opinion-Extractor).
+There's a link that can teleport you back here.
 
-### and Lexicon-based extraction
+### Lexicon-based extraction
 The lexicon has been included in this package. Please refer to `./configs/opinion-lexicon-English`. Well, you don't need to do anything for this step.
 
 ### Unsupervised aspect annotation
@@ -227,11 +227,65 @@ bash scripts/run_postprocess.sh
 ```
 Again, make sure you want all of them, or the unwanted ones are commented out. Another tip for the execution: for larger datasets, the only way to make it runable is to set both `--num_workers` and `--n_partition` to be 1.
 
-[OUTPUT] Most important results `extract.py` generates:
+[OUTPUT] Most important results `postprocess.py` generates: 
+`user_anno_tkn_revs.pkl` and `item_anno_tkn_revs.pkl`: pickle files containing tokenized IDs and attention masks for the BERT model. For details, check out the `EntityReviewAggregation` class for details.
+
+## APRE
+
+All preparing steps are done! Let's get to the training & testing part.
+
 ### Training
 
-### NN-based Aspect and Opinion Extractor 
-We managed to run `SDRN`, a Bert-based model for aspect and sentiment co-extraction. We carefully record the procedure for reproduction. __NOTE__: If trained models are already available, please jump to step 8!
+Everything related to training is in the `train.py` file. Please run the 
+```bash
+python src/train.py -h
+```
+to check out the configurations of experiments. For most of the arguments, the short docstrings in the `help` field are long enough to be understood. We would like to mention a few arguments as below:
+1. `--task`: choose from `train` and `both`. `train` only trains the model and save if the save model flag is on. `both` will train and test the model according to the evaluation config.
+2. `--experimentID`: a unique string for this experiment. You can locate an experiment run by its experiment ID. For example, the log of this run will be store as `./log/[experimentID].log` in the logging directory `./log/`.
+3. `--eval_after_epoch_num`: you may not want to evaluate (test) on the first few epochs because testing wastes time and the model may be not ready yet. This argument does this job: the model will start testing after a certain number of epochs to save time.
+4. `--disable_explicit` and `--disable_implicit`: you can used these two argument to run the ablation studies in our paper. Turn on `--disable_explicit` to get *w/o EX* and turn on `--disable_implicit` to get *w/o IM*.
+
+Some parameters should be aligned with the ASPE part.
+1. `--padded_length`: we set as 100 (default).
+2. `--num_aspects`, `--num_user`, and `--num_item`: please check out the paper. It's okay to set `--num_user` and `--num_item` to larger values to avoid out-of-bound error.
+
+We provide an example to train and test and Digital Music dataset in `scripts/run_train.sh`.
+
+### Logs
+You will be able to see the training process being printed in the console when you run the `train.py`. But it can be flushed away easily. That's where __log__ comes into use. You can find the log of a certain experiment run in directory `./log` with the name `[experimentID].log`. For example, in the `scripts/run_train.sh`, the experiment ID is set to "001". Then you will be able to see `001.log` in the `log` dir. Below is a short segment of the log:
+```
+...
+[01/19/2021 09:05:27][INFO][train.py] [Perf][Iter] ep:[8] iter:[400/460] loss:[0.4566] [2928,1835]
+[01/19/2021 09:05:32][INFO][train.py] [Perf][Iter] ep:[8] iter:[420/460] loss:[0.6840] [2928,1835]
+[01/19/2021 09:05:38][INFO][train.py] [Perf][Iter] ep:[8] iter:[440/460] loss:[0.9334] [2928,1835]
+[01/19/2021 09:05:43][INFO][train.py] [Perf][Epoch] ep:[8] iter:[4140] avgloss:[0.648911]
+[01/19/2021 09:05:52][INFO][train.py] [test] ep:[8] mse:[(0.8755816, 0.84472084)]
+[01/19/2021 09:05:52][INFO][train.py] [Time] Starting Epoch 9
+[01/19/2021 09:05:53][INFO][train.py] [Perf][Iter] ep:[9] iter:[0/460] loss:[0.9120] [2928,1835]
+[01/19/2021 09:05:58][INFO][train.py] [Perf][Iter] ep:[9] iter:[20/460] loss:[0.5846] [2928,1835]
+[01/19/2021 09:06:04][INFO][train.py] [Perf][Iter] ep:[9] iter:[40/460] loss:[0.7867] [2928,1835]
+...
+```
+Details:
+1. Lines with `[Iter]` are training status printed in iterations. We set `--log_iter_num` to 20 so the difference between two print-outs.
+2. Lines with `[Epoch]` are the status for the whole epoch including an average loss.
+3. Lines with `[test]` are testing performances and they are what we reported. If you want to only see the test performances digged out from the whole dump of log, just do `python src/parse_log.py [experimentID]` and you'll see the logs on testing only. The two numbers after `mse` are unclamped loss and the clamp loss, respectively.
+
+### Saved models (checkpoints)
+
+If `--save_model` is on and `--save_epoch_num` and `--save_after_epoch_num` are properly configured, you'll be able to find the checkpoint s in `./ckpt/` directory (or the path you specify in `--save_model_path`. As these are only the weights of the model, you can restore them by 
+```python
+import torch
+from model import APRE
+
+# load args
+
+model = APRE(args)
+model.load_state_dict(torch.load(args.load_model_path))
+```
+## NN-based Aspect and Opinion Extractor 
+We use a separate session to talk about `SDRN`, a Bert-based model for aspect and sentiment co-extraction. We carefully record the procedure for reproduction. __NOTE__: If trained models are already available, please jump to step 8!
 
 1. Clone the repo from GitHub: https://github.com/NKU-IIPLab/SDRN. Many thanks for sharing the code!
 2. Install PyTorch 0.4.1.
@@ -311,18 +365,4 @@ We managed to run `SDRN`, a Bert-based model for aspect and sentiment co-extract
     For example, `./data/anno_2014Lap_digital_music/aspect_terms.pkl` saves all aspect terms extracted by a 2014Lap-trained SDRN model for the dataset `digital_music`.
 
     For `merge`, take output from the above step and merge the sentiment terms sets. Produce results to `./data/senti_term_[subset]_merged.pkl`.
-10. Until here, the SDRN term extraction is done. The generated file can be picked up by `annotate.py`.
-
-## Appendix
-#### SDRN
-
-Modifications made to run `SDRN` in the modern world (PyTorch==1.15).
-
-8. Some useful links:
-   1. [Doc](https://pypi.org/project/pytorch-pretrained-bert/) for `pytorch_pretrained_bert`.
-   2. [Doc](https://huggingface.co/transformers/model_doc/bert.html) from hugging face lastest version of BERT.
-   3. [Homepage](https://github.com/huggingface/transformers) of `transformers` of hugging face. Detailed [Doc](https://huggingface.co/transformers/main_classes/optimizer_schedules.html) for Bert optimizations.
-   4. Later version of `modeling.py` [implementation](https://github.com/cedrickchee/pytorch-pretrained-BERT/blob/master/pytorch_pretrained_bert/modeling.py). As you can tell, the attributes of `BertLayerNorm` have been changed to `weight` and `bias` rather than `gamma` and `beta`.
-   5. Source [code](https://huggingface.co/transformers/v2.0.0/_modules/transformers/modeling_bert.html) for hugging face bert. Unfortunately, this time we didn't use the most advanced version of it :cry:. [Here](https://github.com/naver/sqlova/issues/1) is the GitHub issue about it.
-   6. Of course, the GitHub [homepage](https://github.com/google-research/bert) of Google-research's Bert.
-
+10. Until here, the SDRN term extraction is done. The generated file can be picked up by `annotate.py`. Click [here](#NN-based-aspect-sentiment-term-co-extraction) to jump back.

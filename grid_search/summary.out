@@ -1,3 +1,0 @@
-exp_id, gpu_id, ds, lr, reg_w, feat_dim, nlastlyr, ex_tmp, im_tmp, max_rev_num
-40001,2,tog,0.00002,0.00001,300,2,1.0,1.0,30
-40002,2,tog,0.00003,0.000005,300,2,1.0,1.0,30
