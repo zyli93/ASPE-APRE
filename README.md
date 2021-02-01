@@ -287,7 +287,10 @@ model.load_state_dict(torch.load(args.load_model_path))
 ## NN-based Aspect and Opinion Extractor 
 We use a separate session to talk about `SDRN`, a Bert-based model for aspect and sentiment co-extraction. We carefully record the procedure for reproduction. __NOTE__: If trained models are already available, please jump to step 8!
 
-1. Clone the repo from GitHub: https://github.com/NKU-IIPLab/SDRN. Many thanks for sharing the code!
+1. Clone the repo from GitHub: https://github.com/NKU-IIPLab/SDRN. Many thanks for sharing the code! Put it here
+    ```
+    [this repo]/extractors/SDRN
+    ```
 2. Install PyTorch 0.4.1.
 3. Install the package `pytorch_pretrained_bert`. (I know it might be outdated by the `SDRN` implementation was actually based on it.)
 4. Download Bert checkpoint and config files from [here](https://github.com/ethanjperez/pytorch-pretrained-BERT/blob/master/pytorch_pretrained_bert/modeling.py). Note that the `.bin` (checkpoint) and the `.json` (config) have to match! Add the locations of them to `main.py`.
