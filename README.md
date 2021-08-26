@@ -1,6 +1,29 @@
 # ASPE + APRE
-This is the repository for our ACL-IJCNLP 2021 submission: _Harnessing Item Recommendation with Aspect-based Sentiment Analysisand Unsupervised Term Co-Extraction_.
+
+This is the repository for our EMNLP 2021 Findings publication: _Recommend for a Reason: Unlocking the Power of Unsupervised Aspect-Sentiment Co-Extraction_.
 Procedures implemented in this repo are Aspect-Sentiment Pair Extractor (ASPE) and Attention-Property-aware Rating Estimator (APRE). This document introduces how to reproduce the experiments of ASPE + APRE.
+
+## Reference 
+Please cite our paper via the following BibTex:
+```
+@inproceedings{aspeapre,
+  author    = {Zeyu Li and
+               Wei Cheng and
+               Reema Kshetramade and
+               John Houser and
+               Haifeng Chen and
+               Wei Wang},
+  title     = {Recommend for a Reason: Unlocking the Power of Unsupervised Aspect-Sentiment Co-Extraction},
+  booktitle = {Proceedings of the 2021 Conference on Empirical Methods in Natural
+               Language Processing: Findings, {EMNLP} 2021, 7-11 November 2021, 
+               Online and in the Barceló Bávaro Convention Centre, Punta Cana, Dominican Republic},
+  series    = {Findings of {ACL}},
+  volume    = {{EMNLP} 2021},
+  publisher = {Association for Computational Linguistics},
+  year      = {2021},
+}
+```
+
 ## Data and External Resources
 
 We use the following datasets: Amazon
